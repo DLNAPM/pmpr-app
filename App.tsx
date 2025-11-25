@@ -4,12 +4,19 @@ import DashboardScreen from './screens/DashboardScreen';
 import PropertiesScreen from './screens/PropertiesScreen';
 import PaymentsScreen from './screens/PaymentsScreen';
 import RepairsScreen from './screens/RepairsScreen';
-import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon } from './components/Icons';
+import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon } from './components/Icons';
+import { useAuth } from './contexts/AuthContext';
+import LoginScreen from './screens/LoginScreen';
 
 type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const { authStatus, user, logout } = useAuth();
+
+  if (authStatus === 'idle') {
+    return <LoginScreen />;
+  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -41,8 +48,24 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-gray-800">
       <header className="bg-white shadow-md sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <h1 className="text-2xl font-bold text-blue-800 tracking-tight">PMPR App</h1>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-blue-800 tracking-tight">PMPR App</h1>
+            <div className="flex items-center gap-4">
+               <div className="text-right">
+                 <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <UserCircleIcon className="w-6 h-6 text-gray-400" />
+                    {user ? user.name : 'Guest'}
+                 </div>
+                 <div className="text-xs text-gray-500">
+                    {user ? user.email : 'Local Session'}
+                 </div>
+               </div>
+               <button onClick={logout} className="px-3 py-1.5 text-sm font-medium bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 transition-colors">
+                 Logout
+               </button>
+            </div>
+          </div>
         </div>
       </header>
       

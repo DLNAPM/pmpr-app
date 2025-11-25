@@ -1,8 +1,64 @@
 
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useEffect } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
-import { Property, Payment, Repair, Tenant, RepairStatus } from '../types';
-import { initialData } from './initialData';
+import { Property, Payment, Repair, RepairStatus } from '../types';
+import { useAuth } from './AuthContext';
+
+// This is the initial data for a new user.
+const initialDataFile = {
+    properties: [
+        {
+            id: 'prop1',
+            name: 'Sunset Apartments, Unit 101',
+            address: '123 Ocean View Dr, Miami, FL',
+            tenants: [{id: 't1', name: 'John Doe', phone: '555-1234', email: 'john.doe@email.com'}],
+            leaseStart: '2023-08-01T00:00:00.000Z',
+            leaseEnd: '2024-07-31T00:00:00.000Z',
+            securityDeposit: 1500,
+            rentAmount: 1500,
+            utilitiesToTrack: ['Water', 'Electricity', 'Internet'],
+        },
+        {
+            id: 'prop2',
+            name: 'Downtown Lofts, #5B',
+            address: '456 Main St, New York, NY',
+            tenants: [{id: 't2', name: 'Jane Smith', phone: '555-5678', email: 'jane.smith@email.com'}],
+            leaseStart: '2023-06-01T00:00:00.000Z',
+            leaseEnd: '2024-05-31T00:00:00.000Z',
+            securityDeposit: 2500,
+            rentAmount: 2500,
+            utilitiesToTrack: ['Electricity', 'Gas', 'Trash'],
+        },
+    ],
+    payments: [
+        {
+            id: 'pay1',
+            propertyId: 'prop1',
+            month: new Date().getMonth() + 1,
+            year: new Date().getFullYear(),
+            rentAmount: 1500,
+            rentPaid: true,
+            utilities: [
+                { category: 'Water', amount: 50, isPaid: true },
+                { category: 'Electricity', amount: 75, isPaid: true },
+                { category: 'Internet', amount: 60, isPaid: false },
+            ],
+            paymentDate: new Date().toISOString()
+        }
+    ],
+    repairs: [
+        {
+            id: 'rep1',
+            propertyId: 'prop2',
+            description: 'Leaky faucet in kitchen sink',
+            status: RepairStatus.IN_PROGRESS,
+            contractorName: 'QuickFix Plumbers',
+            cost: 75,
+            requestDate: new Date(new Date().setDate(new Date().getDate()-5)).toISOString(),
+        }
+    ]
+};
+
 
 interface AppContextType {
   properties: Property[];
@@ -24,9 +80,56 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [properties, setProperties] = useLocalStorage<Property[]>('pmpr_properties', initialData.properties);
-  const [payments, setPayments] = useLocalStorage<Payment[]>('pmpr_payments', initialData.payments);
-  const [repairs, setRepairs] = useLocalStorage<Repair[]>('pmpr_repairs', initialData.repairs);
+  const { authStatus, user } = useAuth();
+  
+  const storageKeyPrefix = useMemo(() => {
+    if (authStatus === 'authenticated' && user) {
+        return `pmpr_${user.id}`;
+    }
+    if (authStatus === 'guest') {
+        return 'pmpr_guest';
+    }
+    return null;
+  }, [authStatus, user]);
+
+  const propertiesInitialValue = useMemo(() => (
+    storageKeyPrefix && localStorage.getItem(`${storageKeyPrefix}_properties`) === null
+      ? initialDataFile.properties
+      : []
+  ), [storageKeyPrefix]);
+
+  const paymentsInitialValue = useMemo(() => (
+    storageKeyPrefix && localStorage.getItem(`${storageKeyPrefix}_payments`) === null
+      ? initialDataFile.payments
+      : []
+  ), [storageKeyPrefix]);
+  
+  const repairsInitialValue = useMemo(() => (
+    storageKeyPrefix && localStorage.getItem(`${storageKeyPrefix}_repairs`) === null
+      ? initialDataFile.repairs
+      : []
+  ), [storageKeyPrefix]);
+
+  const [properties, setProperties] = useLocalStorage<Property[]>(
+    storageKeyPrefix ? `${storageKeyPrefix}_properties` : 'pmpr_temp_properties', 
+    propertiesInitialValue
+  );
+  const [payments, setPayments] = useLocalStorage<Payment[]>(
+    storageKeyPrefix ? `${storageKeyPrefix}_payments` : 'pmpr_temp_payments', 
+    paymentsInitialValue
+  );
+  const [repairs, setRepairs] = useLocalStorage<Repair[]>(
+    storageKeyPrefix ? `${storageKeyPrefix}_repairs` : 'pmpr_temp_repairs',
+    repairsInitialValue
+  );
+
+  useEffect(() => {
+    if (!storageKeyPrefix) {
+      setProperties([]);
+      setPayments([]);
+      setRepairs([]);
+    }
+  }, [storageKeyPrefix, setProperties, setPayments, setRepairs]);
 
   const addProperty = (property: Omit<Property, 'id'>) => {
     const newProperty = { ...property, id: crypto.randomUUID() };
@@ -99,9 +202,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 
   const value = useMemo(() => ({
-    properties,
-    payments,
-    repairs,
+    properties: storageKeyPrefix ? properties : [],
+    payments: storageKeyPrefix ? payments : [],
+    repairs: storageKeyPrefix ? repairs : [],
     addProperty,
     updateProperty,
     addPayment,
@@ -113,7 +216,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     getRepairsForProperty,
     searchProperties,
     getSiteHealthScore
-  }), [properties, payments, repairs]);
+  }), [properties, payments, repairs, storageKeyPrefix]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
@@ -125,61 +228,3 @@ export const useAppContext = () => {
   }
   return context;
 };
-
-// Separate file for initial data to keep this file clean
-const initialDataFile = {
-    properties: [
-        {
-            id: 'prop1',
-            name: 'Sunset Apartments, Unit 101',
-            address: '123 Ocean View Dr, Miami, FL',
-            tenants: [{id: 't1', name: 'John Doe', phone: '555-1234', email: 'john.doe@email.com'}],
-            leaseStart: '2023-08-01T00:00:00.000Z',
-            leaseEnd: '2024-07-31T00:00:00.000Z',
-            securityDeposit: 1500,
-            rentAmount: 1500,
-            utilitiesToTrack: ['Water', 'Electricity', 'Internet'],
-        },
-        {
-            id: 'prop2',
-            name: 'Downtown Lofts, #5B',
-            address: '456 Main St, New York, NY',
-            tenants: [{id: 't2', name: 'Jane Smith', phone: '555-5678', email: 'jane.smith@email.com'}],
-            leaseStart: '2023-06-01T00:00:00.000Z',
-            leaseEnd: '2024-05-31T00:00:00.000Z',
-            securityDeposit: 2500,
-            rentAmount: 2500,
-            utilitiesToTrack: ['Electricity', 'Gas', 'Trash'],
-        },
-    ],
-    payments: [
-        {
-            id: 'pay1',
-            propertyId: 'prop1',
-            month: new Date().getMonth() + 1,
-            year: new Date().getFullYear(),
-            rentAmount: 1500,
-            rentPaid: true,
-            utilities: [
-                { category: 'Water', amount: 50, isPaid: true },
-                { category: 'Electricity', amount: 75, isPaid: true },
-                { category: 'Internet', amount: 60, isPaid: false },
-            ],
-            paymentDate: new Date().toISOString()
-        }
-    ],
-    repairs: [
-        {
-            id: 'rep1',
-            propertyId: 'prop2',
-            description: 'Leaky faucet in kitchen sink',
-            status: RepairStatus.IN_PROGRESS,
-            contractorName: 'QuickFix Plumbers',
-            cost: 75,
-            requestDate: new Date(new Date().setDate(new Date().getDate()-5)).toISOString(),
-        }
-    ]
-};
-// Add a simple check to only use initialData if localStorage is empty
-const dataExists = localStorage.getItem('pmpr_properties');
-const initialData = dataExists ? { properties: [], payments: [], repairs: [] } : initialDataFile;
