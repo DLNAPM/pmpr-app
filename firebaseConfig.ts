@@ -10,12 +10,12 @@ declare const firebase: any;
 const API_KEY = process.env.FIREBASE_API_KEY || "YOUR_API_KEY_HERE";
 
 const firebaseConfig = {
-  apiKey: API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN || "your-project.firebaseapp.com",
-  projectId: process.env.FIREBASE_PROJECT_ID || "your-project",
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "your-project.appspot.com",
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: process.env.FIREBASE_APP_ID || ""
+  apiKey: "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo",
+  authDomain: "pmpr-app.firebaseapp.com",
+  projectId: "pmpr-app",
+  storageBucket: "pmpr-app.firebasestorage.app",
+  messagingSenderId: "608205035568",
+  appId: "1:608205035568:web:5aa7530b75be8301bbf5f5"
 };
 
 export const isFirebaseConfigured = API_KEY !== "YOUR_API_KEY_HERE";
