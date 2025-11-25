@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import DashboardScreen from './screens/DashboardScreen';
 import PropertiesScreen from './screens/PropertiesScreen';
@@ -53,8 +54,8 @@ const App: React.FC = () => {
     </button>
   );
 
-  // FIX: Changed icon prop type to React.ReactElement for better type safety with React.cloneElement.
-  const SideNavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactElement }> = ({ tabName, label, icon }) => (
+  // FIX: Changed icon prop type to be more specific to solve a TypeScript error with React.cloneElement.
+  const SideNavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactElement<{ className?: string }> }> = ({ tabName, label, icon }) => (
     <button
       onClick={() => setActiveTab(tabName)}
       className={`flex items-center w-full px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors duration-200 ${

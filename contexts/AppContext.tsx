@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useMemo, useEffect, useState } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus } from '../types';
@@ -6,20 +5,11 @@ import { useAuth, User } from './AuthContext';
 
 // --- API Function Placeholders ---
 // In a real application, these functions would make network requests to your backend.
-// They would be implemented using something like `fetch` or a library like `axios`,
-// and likely managed with React Query for caching, optimistic updates, etc.
-
 const fetchPropertiesFromAPI = async (user: User): Promise<Property[]> => {
   console.log(`FETCHING properties for user ${user.id}`);
-  // Example: const response = await fetch('/api/properties'); return response.json();
-  return []; // Returning empty for now
+  // For the demo, authenticated users start with a clean slate.
+  return []; 
 };
-const addPropertyToAPI = async (user: User, property: Omit<Property, 'id'>) => {
-  console.log(`ADDING property for user ${user.id}`, property);
-  // Example: await fetch('/api/properties', { method: 'POST', body: JSON.stringify(property) });
-};
-// ... other API functions for payments, repairs etc. would follow the same pattern.
-
 
 // This is the initial data for a new GUEST user.
 const initialGuestData = {
@@ -96,28 +86,33 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
     useEffect(() => {
         const loadData = async () => {
             setIsLoading(true);
-            // In a real app, you'd use Promise.all to fetch everything concurrently
             const props = await fetchPropertiesFromAPI(user);
             setProperties(props);
-            // await fetchPaymentsFromAPI...
-            // await fetchRepairsFromAPI...
             setIsLoading(false);
         };
         loadData();
     }, [user]);
 
-    // Authenticated user data logic (would call API endpoints)
-    const addProperty = async (property: Omit<Property, 'id'>) => {
-      await addPropertyToAPI(user, property);
-      // After success, you would refetch the properties list. React Query handles this automatically.
-      const updatedProperties = await fetchPropertiesFromAPI(user); // Manual refetch for demo
-      setProperties(updatedProperties);
+    // FIX: Implemented in-memory state management for authenticated users to simulate a real session.
+    // This resolves the bug where data would disappear after being added.
+    const addProperty = (property: Omit<Property, 'id'>) => {
+        setProperties(p => [...p, { ...property, id: crypto.randomUUID() }]);
     };
-    const updateProperty = (updated: Property) => { /* Call API */ };
-    const addPayment = (payment: Omit<Payment, 'id'>) => { /* Call API */ };
-    const updatePayment = (updated: Payment) => { /* Call API */ };
-    const addRepair = (repair: Omit<Repair, 'id'>) => { /* Call API */ };
-    const updateRepair = (updated: Repair) => { /* Call API */ };
+    const updateProperty = (updated: Property) => {
+        setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
+    };
+    const addPayment = (payment: Omit<Payment, 'id'>) => {
+        setPayments(p => [...p, { ...payment, id: crypto.randomUUID() }]);
+    };
+    const updatePayment = (updated: Payment) => {
+        setPayments(p => p.map(pay => pay.id === updated.id ? updated : pay));
+    };
+    const addRepair = (repair: Omit<Repair, 'id'>) => {
+        setRepairs(r => [...r, { ...repair, id: crypto.randomUUID() }]);
+    };
+    const updateRepair = (updated: Repair) => {
+        setRepairs(r => r.map(rep => rep.id === updated.id ? updated : rep));
+    };
 
     const value = useMemo(() => ({
         properties, payments, repairs, addProperty, updateProperty, addPayment, updatePayment, addRepair, updateRepair
@@ -191,7 +186,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Render a provider with empty data while auth status is 'idle'
-    return <AppProviderLogic data={{ properties: [], payments: [], repairs: [], addProperty: () => {} }} isLoading={true}>{children}</AppProviderLogic>;
+    return <AppProviderLogic data={{ properties: [], payments: [], repairs: [], addProperty: () => {}, updateProperty: () => {}, addPayment: () => {}, updatePayment: () => {}, addRepair: () => {}, updateRepair: () => {} }} isLoading={true}>{children}</AppProviderLogic>;
 };
 
 
