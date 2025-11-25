@@ -21,7 +21,7 @@ if (storedConfigRaw) {
 // If no valid stored config, fallback to environment variables
 if (!firebaseConfig) {
   firebaseConfig = {
-    apiKey: process.env.FIREBASE_API_KEY || "YOUR_API_KEY_HERE",
+    apiKey: process.env.FIREBASE_API_KEY || "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo",
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || "pmpr-app.firebaseapp.com",
     projectId: process.env.FIREBASE_PROJECT_ID || "pmpr-app",
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "pmpr-app.appspot.com",
