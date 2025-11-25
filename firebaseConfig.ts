@@ -7,13 +7,15 @@ import { getAuth } from "firebase/auth";
 // Example: FIREBASE_API_KEY=your_api_key
 
 const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY || "MISSING_API_KEY",
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN || "MISSING_AUTH_DOMAIN",
-  projectId: process.env.FIREBASE_PROJECT_ID || "MISSING_PROJECT_ID",
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "MISSING_STORAGE_BUCKET",
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "MISSING_SENDER_ID",
-  appId: process.env.FIREBASE_APP_ID || "MISSING_APP_ID"
+  apiKey: process.env.FIREBASE_API_KEY,
+  apiKey: "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo",
+  authDomain: "pmpr-app.firebaseapp.com",
+  projectId: "pmpr-app",
+  storageBucket: "pmpr-app.firebasestorage.app",
+  messagingSenderId: "608205035568",
+  appId: "1:608205035568:web:5aa7530b75be8301bbf5f5"
 };
+
 
 // If the API key is the placeholder, it means the environment variables are not set.
 // Log a clear, prominent warning to the developer console.
