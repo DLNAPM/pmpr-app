@@ -1,11 +1,28 @@
 
-import React, { createContext, useContext, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useMemo, useEffect, useState } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus } from '../types';
-import { useAuth } from './AuthContext';
+import { useAuth, User } from './AuthContext';
 
-// This is the initial data for a new user.
-const initialDataFile = {
+// --- API Function Placeholders ---
+// In a real application, these functions would make network requests to your backend.
+// They would be implemented using something like `fetch` or a library like `axios`,
+// and likely managed with React Query for caching, optimistic updates, etc.
+
+const fetchPropertiesFromAPI = async (user: User): Promise<Property[]> => {
+  console.log(`FETCHING properties for user ${user.id}`);
+  // Example: const response = await fetch('/api/properties'); return response.json();
+  return []; // Returning empty for now
+};
+const addPropertyToAPI = async (user: User, property: Omit<Property, 'id'>) => {
+  console.log(`ADDING property for user ${user.id}`, property);
+  // Example: await fetch('/api/properties', { method: 'POST', body: JSON.stringify(property) });
+};
+// ... other API functions for payments, repairs etc. would follow the same pattern.
+
+
+// This is the initial data for a new GUEST user.
+const initialGuestData = {
     properties: [
         {
             id: 'prop1',
@@ -18,45 +35,9 @@ const initialDataFile = {
             rentAmount: 1500,
             utilitiesToTrack: ['Water', 'Electricity', 'Internet'],
         },
-        {
-            id: 'prop2',
-            name: 'Downtown Lofts, #5B',
-            address: '456 Main St, New York, NY',
-            tenants: [{id: 't2', name: 'Jane Smith', phone: '555-5678', email: 'jane.smith@email.com'}],
-            leaseStart: '2023-06-01T00:00:00.000Z',
-            leaseEnd: '2024-05-31T00:00:00.000Z',
-            securityDeposit: 2500,
-            rentAmount: 2500,
-            utilitiesToTrack: ['Electricity', 'Gas', 'Trash'],
-        },
     ],
-    payments: [
-        {
-            id: 'pay1',
-            propertyId: 'prop1',
-            month: new Date().getMonth() + 1,
-            year: new Date().getFullYear(),
-            rentAmount: 1500,
-            rentPaid: true,
-            utilities: [
-                { category: 'Water', amount: 50, isPaid: true },
-                { category: 'Electricity', amount: 75, isPaid: true },
-                { category: 'Internet', amount: 60, isPaid: false },
-            ],
-            paymentDate: new Date().toISOString()
-        }
-    ],
-    repairs: [
-        {
-            id: 'rep1',
-            propertyId: 'prop2',
-            description: 'Leaky faucet in kitchen sink',
-            status: RepairStatus.IN_PROGRESS,
-            contractorName: 'QuickFix Plumbers',
-            cost: 75,
-            requestDate: new Date(new Date().setDate(new Date().getDate()-5)).toISOString(),
-        }
-    ]
+    payments: [],
+    repairs: [],
 };
 
 
@@ -64,6 +45,7 @@ interface AppContextType {
   properties: Property[];
   payments: Payment[];
   repairs: Repair[];
+  isLoading: boolean;
   addProperty: (property: Omit<Property, 'id'>) => void;
   updateProperty: (updatedProperty: Property) => void;
   addPayment: (payment: Omit<Payment, 'id'>) => void;
@@ -79,147 +61,139 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { authStatus, user } = useAuth();
-  
-  const storageKeyPrefix = useMemo(() => {
-    if (authStatus === 'authenticated' && user) {
-        return `pmpr_${user.id}`;
-    }
-    if (authStatus === 'guest') {
-        return 'pmpr_guest';
-    }
-    return null;
-  }, [authStatus, user]);
+// This provider handles data for GUEST users using localStorage
+const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const propertiesInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_properties') === null ? initialGuestData.properties : [], []);
+    const paymentsInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_payments') === null ? initialGuestData.payments : [], []);
+    const repairsInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_repairs') === null ? initialGuestData.repairs : [], []);
 
-  const propertiesInitialValue = useMemo(() => (
-    storageKeyPrefix && localStorage.getItem(`${storageKeyPrefix}_properties`) === null
-      ? initialDataFile.properties
-      : []
-  ), [storageKeyPrefix]);
+    const [properties, setProperties] = useLocalStorage<Property[]>('pmpr_guest_properties', propertiesInitialValue);
+    const [payments, setPayments] = useLocalStorage<Payment[]>('pmpr_guest_payments', paymentsInitialValue);
+    const [repairs, setRepairs] = useLocalStorage<Repair[]>('pmpr_guest_repairs', repairsInitialValue);
+    
+    // Guest-specific data logic
+    const addProperty = (property: Omit<Property, 'id'>) => setProperties(p => [...p, { ...property, id: crypto.randomUUID() }]);
+    const updateProperty = (updated: Property) => setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
+    const addPayment = (payment: Omit<Payment, 'id'>) => setPayments(p => [...p, { ...payment, id: crypto.randomUUID() }]);
+    const updatePayment = (updated: Payment) => setPayments(p => p.map(pay => pay.id === updated.id ? updated : pay));
+    const addRepair = (repair: Omit<Repair, 'id'>) => setRepairs(r => [...r, { ...repair, id: crypto.randomUUID() }]);
+    const updateRepair = (updated: Repair) => setRepairs(r => r.map(rep => rep.id === updated.id ? updated : rep));
+    
+    const value = useMemo(() => ({
+        properties, payments, repairs, addProperty, updateProperty, addPayment, updatePayment, addRepair, updateRepair
+    }), [properties, payments, repairs]);
 
-  const paymentsInitialValue = useMemo(() => (
-    storageKeyPrefix && localStorage.getItem(`${storageKeyPrefix}_payments`) === null
-      ? initialDataFile.payments
-      : []
-  ), [storageKeyPrefix]);
-  
-  const repairsInitialValue = useMemo(() => (
-    storageKeyPrefix && localStorage.getItem(`${storageKeyPrefix}_repairs`) === null
-      ? initialDataFile.repairs
-      : []
-  ), [storageKeyPrefix]);
-
-  const [properties, setProperties] = useLocalStorage<Property[]>(
-    storageKeyPrefix ? `${storageKeyPrefix}_properties` : 'pmpr_temp_properties', 
-    propertiesInitialValue
-  );
-  const [payments, setPayments] = useLocalStorage<Payment[]>(
-    storageKeyPrefix ? `${storageKeyPrefix}_payments` : 'pmpr_temp_payments', 
-    paymentsInitialValue
-  );
-  const [repairs, setRepairs] = useLocalStorage<Repair[]>(
-    storageKeyPrefix ? `${storageKeyPrefix}_repairs` : 'pmpr_temp_repairs',
-    repairsInitialValue
-  );
-
-  useEffect(() => {
-    if (!storageKeyPrefix) {
-      setProperties([]);
-      setPayments([]);
-      setRepairs([]);
-    }
-  }, [storageKeyPrefix, setProperties, setPayments, setRepairs]);
-
-  const addProperty = (property: Omit<Property, 'id'>) => {
-    const newProperty = { ...property, id: crypto.randomUUID() };
-    setProperties(prev => [...prev, newProperty]);
-  };
-  
-  const updateProperty = (updatedProperty: Property) => {
-      setProperties(prev => prev.map(p => p.id === updatedProperty.id ? updatedProperty : p));
-  };
-
-  const addPayment = (payment: Omit<Payment, 'id'>) => {
-    const newPayment = { ...payment, id: crypto.randomUUID() };
-    setPayments(prev => [...prev, newPayment]);
-  };
-
-  const updatePayment = (updatedPayment: Payment) => {
-    setPayments(prev => prev.map(p => p.id === updatedPayment.id ? updatedPayment : p));
-  };
-
-  const addRepair = (repair: Omit<Repair, 'id'>) => {
-    const newRepair = { ...repair, id: crypto.randomUUID() };
-    setRepairs(prev => [...prev, newRepair]);
-  };
-  
-  const updateRepair = (updatedRepair: Repair) => {
-    setRepairs(prev => prev.map(r => r.id === updatedRepair.id ? updatedRepair : r));
-  };
-
-  const getPropertyById = (id: string) => properties.find(p => p.id === id);
-  const getPaymentsForProperty = (propertyId: string) => payments.filter(p => p.propertyId === propertyId);
-  const getRepairsForProperty = (propertyId: string) => repairs.filter(r => r.propertyId === propertyId);
-  
-  const searchProperties = (query: string) => {
-      if (!query) return properties;
-      const lowerCaseQuery = query.toLowerCase();
-      return properties.filter(p => 
-          p.name.toLowerCase().includes(lowerCaseQuery) ||
-          p.address.toLowerCase().includes(lowerCaseQuery) ||
-          p.tenants.some(t => t.name.toLowerCase().includes(lowerCaseQuery))
-      );
-  };
-
-  const getSiteHealthScore = (propertyId: string) => {
-    const propertyPayments = getPaymentsForProperty(propertyId);
-    const propertyRepairs = getRepairsForProperty(propertyId);
-
-    let score = 100;
-
-    if (propertyPayments.length === 0) return 75; // Neutral score for new properties
-
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-
-    propertyPayments.forEach(payment => {
-        // Penalty for late rent
-        if (!payment.rentPaid && (payment.year < currentYear || (payment.year === currentYear && payment.month < currentMonth))) {
-            score -= 10;
-        }
-        // Penalty for unpaid utilities
-        const unpaidUtils = payment.utilities.filter(u => !u.isPaid).length;
-        score -= unpaidUtils * 2;
-    });
-
-    const openRepairs = propertyRepairs.filter(r => r.status !== RepairStatus.COMPLETE).length;
-    score -= openRepairs * 5;
-
-    return Math.max(0, Math.min(100, score));
-  };
-
-
-  const value = useMemo(() => ({
-    properties: storageKeyPrefix ? properties : [],
-    payments: storageKeyPrefix ? payments : [],
-    repairs: storageKeyPrefix ? repairs : [],
-    addProperty,
-    updateProperty,
-    addPayment,
-    updatePayment,
-    addRepair,
-    updateRepair,
-    getPropertyById,
-    getPaymentsForProperty,
-    getRepairsForProperty,
-    searchProperties,
-    getSiteHealthScore
-  }), [properties, payments, repairs, storageKeyPrefix]);
-
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+    return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
+
+// This provider handles data for AUTHENTICATED users using API calls
+const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNode }> = ({ user, children }) => {
+    const [properties, setProperties] = useState<Property[]>([]);
+    const [payments, setPayments] = useState<Payment[]>([]);
+    const [repairs, setRepairs] = useState<Repair[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            // In a real app, you'd use Promise.all to fetch everything concurrently
+            const props = await fetchPropertiesFromAPI(user);
+            setProperties(props);
+            // await fetchPaymentsFromAPI...
+            // await fetchRepairsFromAPI...
+            setIsLoading(false);
+        };
+        loadData();
+    }, [user]);
+
+    // Authenticated user data logic (would call API endpoints)
+    const addProperty = async (property: Omit<Property, 'id'>) => {
+      await addPropertyToAPI(user, property);
+      // After success, you would refetch the properties list. React Query handles this automatically.
+      const updatedProperties = await fetchPropertiesFromAPI(user); // Manual refetch for demo
+      setProperties(updatedProperties);
+    };
+    const updateProperty = (updated: Property) => { /* Call API */ };
+    const addPayment = (payment: Omit<Payment, 'id'>) => { /* Call API */ };
+    const updatePayment = (updated: Payment) => { /* Call API */ };
+    const addRepair = (repair: Omit<Repair, 'id'>) => { /* Call API */ };
+    const updateRepair = (updated: Repair) => { /* Call API */ };
+
+    const value = useMemo(() => ({
+        properties, payments, repairs, addProperty, updateProperty, addPayment, updatePayment, addRepair, updateRepair
+    }), [properties, payments, repairs]);
+    
+    return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
+};
+
+
+// This component contains the shared logic (getters, health score) that both providers use.
+const AppProviderLogic: React.FC<{data: any, isLoading: boolean, children: React.ReactNode}> = ({ data, isLoading, children }) => {
+    const { properties, payments, repairs } = data;
+
+    const getPropertyById = (id: string) => properties.find((p: Property) => p.id === id);
+    const getPaymentsForProperty = (propertyId: string) => payments.filter((p: Payment) => p.propertyId === propertyId);
+    const getRepairsForProperty = (propertyId: string) => repairs.filter((r: Repair) => r.propertyId === propertyId);
+    
+    const searchProperties = (query: string) => {
+        if (!query) return properties;
+        const lowerCaseQuery = query.toLowerCase();
+        return properties.filter((p: Property) => 
+            p.name.toLowerCase().includes(lowerCaseQuery) ||
+            p.address.toLowerCase().includes(lowerCaseQuery) ||
+            p.tenants.some(t => t.name.toLowerCase().includes(lowerCaseQuery))
+        );
+    };
+
+    const getSiteHealthScore = (propertyId: string) => {
+        const propertyPayments = getPaymentsForProperty(propertyId);
+        const propertyRepairs = getRepairsForProperty(propertyId);
+        let score = 100;
+        if (propertyPayments.length === 0) return 75;
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+        propertyPayments.forEach((payment: Payment) => {
+            if (!payment.rentPaid && (payment.year < currentYear || (payment.year === currentYear && payment.month < currentMonth))) {
+                score -= 10;
+            }
+            const unpaidUtils = payment.utilities.filter(u => !u.isPaid).length;
+            score -= unpaidUtils * 2;
+        });
+        const openRepairs = propertyRepairs.filter((r: Repair) => r.status !== RepairStatus.COMPLETE).length;
+        score -= openRepairs * 5;
+        return Math.max(0, Math.min(100, score));
+    };
+
+    const value = useMemo(() => ({
+        ...data,
+        isLoading,
+        getPropertyById,
+        getPaymentsForProperty,
+        getRepairsForProperty,
+        searchProperties,
+        getSiteHealthScore
+    }), [data, isLoading]);
+
+    return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+};
+
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { authStatus, user } = useAuth();
+
+    if (authStatus === 'authenticated' && user) {
+        return <AuthenticatedDataProvider user={user}>{children}</AuthenticatedDataProvider>;
+    }
+    
+    if (authStatus === 'guest') {
+        return <GuestDataProvider>{children}</GuestDataProvider>;
+    }
+
+    // Render a provider with empty data while auth status is 'idle'
+    return <AppProviderLogic data={{ properties: [], payments: [], repairs: [], addProperty: () => {} }} isLoading={true}>{children}</AppProviderLogic>;
+};
+
 
 export const useAppContext = () => {
   const context = useContext(AppContext);

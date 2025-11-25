@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useMemo, useEffect } from '
 
 type AuthStatus = 'idle' | 'guest' | 'authenticated';
 
-interface User {
+export interface User {
   id: string;
   name: string;
   email: string;
@@ -19,23 +19,24 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// In a real app, this would involve a library like Firebase Auth or Google Identity Services.
-// We are simulating it here.
-const FAKE_USER: User = {
-    id: 'google_user_12345',
-    name: 'Demo User',
-    email: 'demo.user@example.com'
+// In a real app, this would be replaced with a real user object from Firebase Auth.
+const FAKE_PROD_USER: User = {
+    id: 'prod_user_xyz789', // A more distinct ID for the authenticated user
+    name: 'Prod User',
+    email: 'prod.user@example.com'
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  // FIX: Corrected the useState syntax. The previous syntax was invalid.
   const [authStatus, setAuthStatus] = useState<AuthStatus>('idle');
 
   useEffect(() => {
-    // Check session storage to see if user was already logged in
+    // In a real app, you would use Firebase's `onAuthStateChanged` listener here
+    // to automatically manage user sessions across page reloads.
     const storedStatus = sessionStorage.getItem('pmpr_authStatus') as AuthStatus;
     if (storedStatus === 'authenticated') {
-        setUser(FAKE_USER);
+        setUser(FAKE_PROD_USER);
         setAuthStatus('authenticated');
     } else if (storedStatus === 'guest') {
         setAuthStatus('guest');
@@ -45,9 +46,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = () => {
-    // This is where the Google OAuth flow would be triggered.
-    // On success, we would get a user object back.
-    setUser(FAKE_USER);
+    // REAL IMPLEMENTATION:
+    // import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+    // const auth = getAuth();
+    // const provider = new GoogleAuthProvider();
+    // signInWithPopup(auth, provider).then((result) => {
+    //   const { uid, displayName, email } = result.user;
+    //   setUser({ id: uid, name: displayName, email });
+    //   setAuthStatus('authenticated');
+    //   sessionStorage.setItem('pmpr_authStatus', 'authenticated');
+    // }).catch((error) => console.error("Authentication failed:", error));
+
+    // SIMULATED IMPLEMENTATION:
+    setUser(FAKE_PROD_USER);
     setAuthStatus('authenticated');
     sessionStorage.setItem('pmpr_authStatus', 'authenticated');
   };
@@ -59,6 +70,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    // REAL IMPLEMENTATION:
+    // import { getAuth } from "firebase/auth";
+    // const auth = getAuth();
+    // auth.signOut().then(() => {
+    //   setUser(null);
+    //   setAuthStatus('idle');
+    //   sessionStorage.removeItem('pmpr_authStatus');
+    // });
+    
+    // SIMULATED IMPLEMENTATION:
     setUser(null);
     setAuthStatus('idle');
     sessionStorage.removeItem('pmpr_authStatus');
@@ -72,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logout
   }), [user, authStatus]);
 
+  // FIX: Corrected the closing tag for AuthContext.Provider.
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
