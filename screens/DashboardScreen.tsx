@@ -3,11 +3,25 @@ import React, { useMemo } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import ProgressBar from '../components/ProgressBar';
 import { useAppContext } from '../contexts/AppContext';
-import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon } from '../components/Icons';
+import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon, CurrencyDollarIcon, ArrowTopRightOnSquareIcon } from '../components/Icons';
 
 interface DashboardScreenProps {
   onAction: (tab: 'properties' | 'payments' | 'repairs', action?: string) => void;
 }
+
+// Helper to generate a deterministic, fake property value for the demo
+const getFakeRedfinValue = (propertyId: string) => {
+    let hash = 0;
+    for (let i = 0; i < propertyId.length; i++) {
+        const char = propertyId.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0; // Convert to 32bit integer
+    }
+    const baseValue = 250000;
+    const randomPart = Math.abs(hash) % 700000;
+    return baseValue + randomPart;
+};
+
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
     const { properties, payments, getSiteHealthScore } = useAppContext();
@@ -154,12 +168,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
                     <CardHeader><h3 className="font-semibold text-lg">Site Health & Ranking</h3></CardHeader>
                     <CardContent>
                         {properties.length > 0 ? (
-                            <ul className="space-y-3">
+                            <ul className="space-y-4">
                                 {sortedProperties.map((prop, index) => {
                                     const score = getSiteHealthScore(prop.id);
                                     return (
-                                        <li key={prop.id} className="flex items-center justify-between">
-                                            <div>
+                                        <li key={prop.id} className="flex items-start justify-between">
+                                            <div className="flex-1 pr-4">
                                                 <p className="font-medium">{index + 1}. {prop.name}</p>
                                                 <a
                                                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(prop.address)}`}
@@ -170,6 +184,21 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
                                                   <MapPinIcon className="w-3 h-3 text-gray-400 group-hover:text-blue-500 transition-colors" />
                                                   <span>{prop.address}</span>
                                                 </a>
+                                                <div className="flex items-center justify-between mt-1.5">
+                                                    <a
+                                                      href={`https://www.redfin.com/stingray/search?search_location=${encodeURIComponent(prop.address)}`}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className="group inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-600 transition-colors"
+                                                    >
+                                                      <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400 group-hover:text-red-500 transition-colors" />
+                                                      <span>Redfin.com</span>
+                                                    </a>
+                                                    <div className="flex items-center gap-1 text-xs text-gray-800 font-semibold">
+                                                        <CurrencyDollarIcon className="w-3.5 h-3.5 text-green-500" />
+                                                        <span>{formatCurrency(getFakeRedfinValue(prop.id)).replace('.00', '')}</span>
+                                                    </div>
+                                                </div>
                                             </div>
                                             <span className={`font-bold text-lg ${getHealthColor(score)}`}>{score.toFixed(0)}</span>
                                         </li>
