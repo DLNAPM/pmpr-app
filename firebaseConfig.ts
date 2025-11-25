@@ -8,7 +8,7 @@ declare const firebase: any;
 
 const firebaseConfig = {
   // FIX: Provide a fallback for the API key to prevent crashes if the env var is not set.
-  apiKey: process.env.FIREBASE_API_KEY || "MISSING_API_KEY",
+  apiKey: "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo",
   authDomain: "pmpr-app.firebaseapp.com",
   projectId: "pmpr-app",
   storageBucket: "pmpr-app.firebasestorage.app",
