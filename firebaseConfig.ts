@@ -7,18 +7,16 @@ declare const firebase: any;
 // You MUST set these in your deployment environment for authentication to work.
 // Example: FIREBASE_API_KEY=your_api_key
 
-const API_KEY = process.env.FIREBASE_API_KEY || "YOUR_API_KEY_HERE";
-
 const firebaseConfig = {
-  apiKey: "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo",
-  authDomain: "pmpr-app.firebaseapp.com",
-  projectId: "pmpr-app",
-  storageBucket: "pmpr-app.firebasestorage.app",
-  messagingSenderId: "608205035568",
-  appId: "1:608205035568:web:5aa7530b75be8301bbf5f5"
+  apiKey: process.env.FIREBASE_API_KEY || "YOUR_API_KEY_HERE",
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN || "pmpr-app.firebaseapp.com",
+  projectId: process.env.FIREBASE_PROJECT_ID || "pmpr-app",
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "pmpr-app.appspot.com",
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "1234567890",
+  appId: process.env.FIREBASE_APP_ID || "1:12345:web:abcdef123"
 };
 
-export const isFirebaseConfigured = API_KEY !== "YOUR_API_KEY_HERE";
+export const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
 
 // Initialize Firebase only if it is configured and hasn't been initialized yet.
 if (isFirebaseConfigured) {

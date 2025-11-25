@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
 import { auth, isFirebaseConfigured } from '../firebaseConfig';
 
@@ -36,8 +35,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
     }
     
-    // FIX: Corrected the Firebase user type from `firebase.auth.User` to `firebase.User` which is the correct type for the v8 compatibility library.
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser: firebase.User | null) => {
+    // FIX: The Firebase user type is `firebase.auth.User` for the v8 compatibility library.
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser: firebase.auth.User | null) => {
       if (firebaseUser) {
         const { uid, displayName, email } = firebaseUser;
         if (displayName && email) {
