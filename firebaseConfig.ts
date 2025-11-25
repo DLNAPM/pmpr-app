@@ -1,7 +1,5 @@
-
-// FIX: Switched to Firebase compat libraries to resolve module import errors.
-import firebase from "firebase/compat/app";
-import "firebase/compat/auth";
+// Declare the global firebase object that is loaded from the script tags in index.html
+declare const firebase: any;
 
 // --- IMPORTANT ---
 // This app reads Firebase credentials from environment variables.
@@ -31,11 +29,11 @@ if (firebaseConfig.apiKey === "MISSING_API_KEY") {
     );
 }
 
-// Initialize Firebase
-// Using fallbacks ensures initializeApp doesn't crash the app on startup.
-// FIX: Use compat syntax for initialization.
-const app = firebase.initializeApp(firebaseConfig);
+// Initialize Firebase, but only if it hasn't been initialized yet.
+// This prevents errors during hot-reloading in development.
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
 
 // Initialize Firebase Authentication and get a reference to the service
-// FIX: Use compat syntax to get auth service.
 export const auth = firebase.auth();

@@ -1,9 +1,8 @@
-
 import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
-// FIX: Use Firebase compat library to resolve module import errors.
-import firebase from "firebase/compat/app";
 import { auth } from '../firebaseConfig';
 
+// Declare the global firebase object provided by the scripts in index.html
+declare const firebase: any;
 
 type AuthStatus = 'idle' | 'guest' | 'authenticated' | 'loading';
 
@@ -29,8 +28,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
 
   useEffect(() => {
-    // FIX: Use compat syntax for onAuthStateChanged and firebase.User type.
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser: firebase.User | null) => {
+    // FIX: The firebase.User type is incorrect for the compat library setup. It should be firebase.auth.User.
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser: firebase.auth.User | null) => {
       if (firebaseUser) {
         const { uid, displayName, email } = firebaseUser;
         if (displayName && email) {
@@ -58,13 +57,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = () => {
-    // FIX: Use compat syntax for GoogleAuthProvider.
     const provider = new firebase.auth.GoogleAuthProvider();
     setAuthStatus('loading');
-    // FIX: Use compat syntax for signInWithPopup.
     auth.signInWithPopup(provider)
         .then((result) => {
-            // FIX: Add null check for result.user, which is nullable in compat mode.
             if (result.user) {
               const { uid, displayName, email } = result.user;
               if (displayName && email) {
@@ -83,7 +79,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const continueAsGuest = () => {
     // Ensure any potential Firebase session is signed out before proceeding as guest.
     if (auth.currentUser) {
-        // FIX: Use compat syntax for signOut.
         auth.signOut();
     }
     setUser(null);
@@ -92,7 +87,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    // FIX: Use compat syntax for signOut.
     auth.signOut().then(() => {
       setUser(null);
       setAuthStatus('idle');
