@@ -53,6 +53,19 @@ const App: React.FC = () => {
     </button>
   );
 
+  // FIX: Changed icon prop type to React.ReactElement for better type safety with React.cloneElement.
+  const SideNavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactElement }> = ({ tabName, label, icon }) => (
+    <button
+      onClick={() => setActiveTab(tabName)}
+      className={`flex items-center w-full px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors duration-200 ${
+        activeTab === tabName ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-slate-200 hover:text-gray-900'
+      }`}
+    >
+      {React.cloneElement(icon, { className: 'w-5 h-5 mr-3 flex-shrink-0' })}
+      <span>{label}</span>
+    </button>
+  );
+
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-gray-800">
       <header className="bg-white shadow-md sticky top-0 z-10">
@@ -77,11 +90,21 @@ const App: React.FC = () => {
         </div>
       </header>
       
-      <main className="pb-24">
-        <div className="max-w-7xl mx-auto sm:px-6 lg:px-8 p-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex">
+        <aside className="hidden md:block w-56 flex-shrink-0 py-8 pr-8">
+            <nav className="space-y-1">
+                <SideNavItem tabName="dashboard" label="Dashboard" icon={<ChartPieIcon />} />
+                <SideNavItem tabName="properties" label="Properties" icon={<BuildingOfficeIcon />} />
+                <SideNavItem tabName="payments" label="Payments" icon={<CreditCardIcon />} />
+                <SideNavItem tabName="repairs" label="Repairs" icon={<WrenchScrewdriverIcon />} />
+            </nav>
+        </aside>
+        
+        <main className="flex-1 min-w-0 py-8 pb-24 md:pb-8">
           {renderContent()}
-        </div>
-      </main>
+        </main>
+      </div>
+
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg flex justify-around md:hidden">
         <NavItem tabName="dashboard" label="Dashboard" icon={<ChartPieIcon className="w-6 h-6" />} />

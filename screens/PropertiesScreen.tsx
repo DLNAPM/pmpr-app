@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant } from '../types';
-import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon } from '../components/Icons';
+import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { UTILITY_CATEGORIES } from '../constants';
 
@@ -54,12 +54,24 @@ const PropertyForm: React.FC<{property?: Property; onSave: (property: Omit<Prope
             <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Property Name (e.g., Unit 101)" required className="w-full p-2 border rounded" />
             <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="Address" required className="w-full p-2 border rounded" />
             <div className="grid grid-cols-2 gap-4">
-                <input type="number" name="rentAmount" value={formData.rentAmount} onChange={handleChange} placeholder="Rent Amount" required className="w-full p-2 border rounded" />
-                <input type="number" name="securityDeposit" value={formData.securityDeposit} onChange={handleChange} placeholder="Security Deposit" required className="w-full p-2 border rounded" />
+                <div>
+                    <label htmlFor="rentAmount" className="block text-sm font-medium text-gray-700">Rent Amount</label>
+                    <input id="rentAmount" type="number" name="rentAmount" value={formData.rentAmount} onChange={handleChange} placeholder="Rent Amount" required className="w-full p-2 border rounded mt-1" />
+                </div>
+                <div>
+                    <label htmlFor="securityDeposit" className="block text-sm font-medium text-gray-700">Security Deposit</label>
+                    <input id="securityDeposit" type="number" name="securityDeposit" value={formData.securityDeposit} onChange={handleChange} placeholder="Security Deposit" required className="w-full p-2 border rounded mt-1" />
+                </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm">Lease Start</label><input type="date" name="leaseStart" value={formData.leaseStart} onChange={handleChange} required className="w-full p-2 border rounded" /></div>
-                <div><label className="text-sm">Lease End</label><input type="date" name="leaseEnd" value={formData.leaseEnd} onChange={handleChange} required className="w-full p-2 border rounded" /></div>
+                <div>
+                    <label htmlFor="leaseStart" className="block text-sm font-medium text-gray-700">Lease Start</label>
+                    <input id="leaseStart" type="date" name="leaseStart" value={formData.leaseStart} onChange={handleChange} required className="w-full p-2 border rounded mt-1" />
+                </div>
+                <div>
+                    <label htmlFor="leaseEnd" className="block text-sm font-medium text-gray-700">Lease End</label>
+                    <input id="leaseEnd" type="date" name="leaseEnd" value={formData.leaseEnd} onChange={handleChange} required className="w-full p-2 border rounded mt-1" />
+                </div>
             </div>
             <div>
                 <h3 className="font-semibold mb-2">Tenant Information</h3>
@@ -142,7 +154,16 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                         <CardHeader className="flex justify-between items-start">
                             <div>
                                 <h3 className="font-bold text-lg text-blue-800">{prop.name}</h3>
-                                <p className="text-sm text-gray-500">{prop.address}</p>
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(prop.address)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="group inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 transition-colors"
+                                >
+                                  <MapPinIcon className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                                  <span>{prop.address}</span>
+                                </a>
                             </div>
                             <button 
                                 onClick={(e) => { e.stopPropagation(); openEditModal(prop); }} 
