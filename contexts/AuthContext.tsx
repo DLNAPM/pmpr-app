@@ -12,6 +12,15 @@ export interface User {
   email: string;
 }
 
+interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+}
+
 interface AuthContextType {
   user: User | null;
   authStatus: AuthStatus;
@@ -19,6 +28,7 @@ interface AuthContextType {
   signInWithGoogle: () => void;
   continueAsGuest: () => void;
   logout: () => void;
+  saveFirebaseConfig: (config: FirebaseConfig) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,9 +45,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
     }
     
-    // FIX: The Firebase user type is `firebase.auth.User` for the v8 compatibility library.
-    // @FIX: Replaced `firebase.auth.User` with `any` to resolve "Cannot find namespace 'firebase'" error.
-    // The global `firebase` object is declared as `any`, so its nested types are not available to TypeScript.
     const unsubscribe = auth.onAuthStateChanged((firebaseUser: any | null) => {
       if (firebaseUser) {
         const { uid, displayName, email } = firebaseUser;
@@ -111,15 +118,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       sessionStorage.removeItem('pmpr_authStatus');
     }
   };
+
+  const saveFirebaseConfig = (config: FirebaseConfig) => {
+    try {
+      localStorage.setItem('pmpr_firebaseConfig', JSON.stringify(config));
+      // Reload the page to apply the new configuration from localStorage
+      window.location.reload();
+    } catch (e) {
+      console.error("Failed to save Firebase config:", e);
+      alert("An error occurred while trying to save the configuration.");
+    }
+  };
   
   const value = useMemo(() => ({
     user,
     authStatus,
-    // FIX: Provided a value for `isGoogleSignInConfigured` in the context. It should be initialized with `isFirebaseConfigured`.
     isGoogleSignInConfigured: isFirebaseConfigured,
     signInWithGoogle,
     continueAsGuest,
-    logout
+    logout,
+    saveFirebaseConfig
   }), [user, authStatus]);
 
   if (authStatus === 'loading') {

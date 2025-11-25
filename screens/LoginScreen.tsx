@@ -4,10 +4,12 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { GoogleIcon, QuestionMarkCircleIcon } from '../components/Icons';
 import HelpModal from '../components/HelpModal';
+import FirebaseConfigModal from '../components/FirebaseConfigModal';
 
 const LoginScreen: React.FC = () => {
   const { signInWithGoogle, continueAsGuest, isGoogleSignInConfigured } = useAuth();
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
@@ -29,9 +31,12 @@ const LoginScreen: React.FC = () => {
                     <span className="font-medium text-gray-700">Sign in with Google</span>
                 </button>
                 {!isGoogleSignInConfigured && (
-                    <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded-md">
-                        Google Sign-In is not configured. Please contact the administrator or continue as a guest.
-                    </p>
+                    <div className="text-xs text-amber-700 bg-amber-50 p-2 rounded-md text-center">
+                        <p>Google Sign-In is not configured.</p>
+                        <button onClick={() => setIsConfigModalOpen(true)} className="font-semibold underline hover:text-amber-800">
+                            Configure Connection
+                        </button>
+                    </div>
                 )}
 
                 <div className="relative my-6">
@@ -59,6 +64,7 @@ const LoginScreen: React.FC = () => {
         </div>
       </div>
       <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
+      <FirebaseConfigModal isOpen={isConfigModalOpen} onClose={() => setIsConfigModalOpen(false)} />
     </div>
   );
 };
