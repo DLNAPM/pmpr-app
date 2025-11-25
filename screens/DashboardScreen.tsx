@@ -1,12 +1,12 @@
-
 import React, { useMemo } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import ProgressBar from '../components/ProgressBar';
 import { useAppContext } from '../contexts/AppContext';
 import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon, CurrencyDollarIcon, ArrowTopRightOnSquareIcon } from '../components/Icons';
+import { RepairStatus } from '../types';
 
 interface DashboardScreenProps {
-  onAction: (tab: 'properties' | 'payments' | 'repairs' | 'reporting', action?: string) => void;
+  onAction: (tab: 'properties' | 'payments' | 'repairs' | 'reporting' | 'contractors', action?: string) => void;
 }
 
 // Helper to generate a deterministic, fake property value for the demo
@@ -24,7 +24,7 @@ const getFakeRedfinValue = (propertyId: string) => {
 
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
-    const { properties, payments, getSiteHealthScore } = useAppContext();
+    const { properties, payments, repairs, getSiteHealthScore } = useAppContext();
 
     const summary = useMemo(() => {
         let totalCollected = 0;
@@ -58,6 +58,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
 
         return { totalCollected, totalOutstanding, totalDue: totalBilled, overallCollectionRate, categoryBreakdown };
     }, [payments]);
+
+    const repairSummary = useMemo(() => {
+        const openRequests = repairs.filter(r => r.status !== RepairStatus.COMPLETE).length;
+        const totalCost = repairs.filter(r => r.status === RepairStatus.COMPLETE).reduce((sum, r) => sum + r.cost, 0);
+        return { openRequests, totalCost };
+    }, [repairs]);
     
     const sortedProperties = useMemo(() => {
         return [...properties].sort((a, b) => getSiteHealthScore(b.id) - getSiteHealthScore(a.id));
@@ -135,15 +141,19 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
                 <Card>
                     <CardHeader><h3 className="font-semibold text-lg">Payment Breakdown (This Month)</h3></CardHeader>
                     <CardContent className="space-y-4">
-                        {Object.entries(summary.categoryBreakdown).map(([category, data]) => (
-                            <div key={category}>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="font-medium">{category}</span>
-                                    <span className="text-sm text-gray-600">{formatCurrency(data.paid)} / {formatCurrency(data.total)}</span>
+                        {/* Fix: Explicitly type 'data' to resolve properties 'paid' and 'total' not being found on type 'unknown'. */}
+                        {Object.entries(summary.categoryBreakdown).map(([category, data]) => {
+                            const typedData = data as { paid: number, total: number };
+                            return (
+                                <div key={category}>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="font-medium">{category}</span>
+                                        <span className="text-sm text-gray-600">{formatCurrency(typedData.paid)} / {formatCurrency(typedData.total)}</span>
+                                    </div>
+                                    <ProgressBar value={typedData.total > 0 ? (typedData.paid / typedData.total) * 100 : 0} />
                                 </div>
-                                <ProgressBar value={data.total > 0 ? (data.paid / data.total) * 100 : 0} />
-                            </div>
-                        ))}
+                            );
+                        })}
                          {Object.keys(summary.categoryBreakdown).length === 0 && <p className="text-gray-500 text-center py-4">No payments recorded for the current month.</p>}
                     </CardContent>
                 </Card>
@@ -152,10 +162,25 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
             {/* Side Column */}
             <div className="space-y-6">
                  <Card>
-                    <CardHeader><h3 className="font-semibold text-lg">Active Properties</h3></CardHeader>
-                    <CardContent>
-                        <p className="text-4xl font-bold text-blue-800">{properties.length}</p>
-                        <p className="text-sm text-gray-500">properties being managed</p>
+                    <CardHeader><h3 className="font-semibold text-lg">Properties & Repairs</h3></CardHeader>
+                    <CardContent className="divide-y divide-gray-200">
+                        <div className="pb-4">
+                            <p className="text-sm text-gray-500">Active Properties</p>
+                            <p className="text-4xl font-bold text-blue-800">{properties.length}</p>
+                        </div>
+                        <div className="pt-4">
+                            <p className="text-sm text-gray-500">Repairs Overview</p>
+                            <div className="flex justify-between items-baseline mt-1">
+                                <div>
+                                    <p className="text-2xl font-bold text-yellow-600">{repairSummary.openRequests}</p>
+                                    <p className="text-xs text-gray-500">Open Requests</p>
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-bold text-slate-700">{formatCurrency(repairSummary.totalCost)}</p>
+                                    <p className="text-xs text-gray-500">Completed Cost</p>
+                                </div>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
                 <Card>

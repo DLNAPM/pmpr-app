@@ -1,7 +1,7 @@
+import { useState, useEffect, Dispatch, SetStateAction } from 'react';
 
-import { useState, useEffect } from 'react';
-
-function useLocalStorage<T,>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+// Fix: Use Dispatch and SetStateAction imported from 'react' to correctly type the state setter function, resolving the "Cannot find namespace 'React'" error.
+function useLocalStorage<T,>(key: string, initialValue: T): [T, Dispatch<SetStateAction<T>>] {
   const [storedValue, setStoredValue] = useState<T>(() => {
     try {
       const item = window.localStorage.getItem(key);
@@ -32,7 +32,8 @@ function useLocalStorage<T,>(key: string, initialValue: T): [T, React.Dispatch<R
   }, [key, initialValue]);
 
 
-  const setValue: React.Dispatch<React.SetStateAction<T>> = (value) => {
+  // Fix: Use Dispatch and SetStateAction imported from 'react' to correctly type the state setter function.
+  const setValue: Dispatch<SetStateAction<T>> = (value) => {
     try {
       const valueToStore = value instanceof Function ? value(storedValue) : value;
       setStoredValue(valueToStore);

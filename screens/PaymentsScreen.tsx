@@ -46,19 +46,25 @@ const PaymentForm: React.FC<{property: Property; onSave: (payment: Omit<Payment,
                 </select>
                 <input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full p-2 border rounded" />
             </div>
+            
+            <div className="grid grid-cols-2 gap-2 mb-1 px-3">
+                <label className="text-sm font-medium text-gray-500">Bill Amount</label>
+                <label className="text-sm font-medium text-gray-500">Paid Amount</label>
+            </div>
+
             <div className="p-3 border rounded-lg space-y-2">
                 <label className="font-medium">Rent</label>
                 <div className="grid grid-cols-2 gap-2">
-                    <input type="number" readOnly value={property.rentAmount} className="w-full p-2 border rounded bg-gray-100" placeholder="Bill Amount" />
-                    <input type="number" value={rentPaidAmount} onChange={(e) => setRentPaidAmount(parseFloat(e.target.value) || 0)} className="w-full p-2 border rounded" placeholder="Paid Amount" />
+                    <input type="number" readOnly value={property.rentAmount} className="w-full p-2 border rounded bg-gray-100" />
+                    <input type="number" value={rentPaidAmount} onChange={(e) => setRentPaidAmount(parseFloat(e.target.value) || 0)} className="w-full p-2 border rounded" />
                 </div>
             </div>
             {utilities.map((util, index) => (
                 <div key={util.category} className="p-3 border rounded-lg space-y-2">
                      <label className="font-medium">{util.category}</label>
                      <div className="grid grid-cols-2 gap-2">
-                        <input type="number" value={util.billAmount} onChange={(e) => handleUtilityChange(index, 'billAmount', e.target.value)} className="w-full p-2 border rounded" placeholder="Bill Amount"/>
-                        <input type="number" value={util.paidAmount} onChange={(e) => handleUtilityChange(index, 'paidAmount', e.target.value)} className="w-full p-2 border rounded" placeholder="Paid Amount"/>
+                        <input type="number" value={util.billAmount} onChange={(e) => handleUtilityChange(index, 'billAmount', e.target.value)} className="w-full p-2 border rounded" />
+                        <input type="number" value={util.paidAmount} onChange={(e) => handleUtilityChange(index, 'paidAmount', e.target.value)} className="w-full p-2 border rounded" />
                     </div>
                 </div>
             ))}

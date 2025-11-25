@@ -5,12 +5,13 @@ import PropertiesScreen from './screens/PropertiesScreen';
 import PaymentsScreen from './screens/PaymentsScreen';
 import RepairsScreen from './screens/RepairsScreen';
 import ReportingScreen from './screens/ReportingScreen';
-import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon } from './components/Icons';
+import ContractorsScreen from './screens/ContractorsScreen';
+import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import HelpModal from './components/HelpModal';
 
-type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'reporting';
+type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -39,6 +40,8 @@ const App: React.FC = () => {
         return <PaymentsScreen action={action} onActionDone={onActionDone} />;
       case 'repairs':
         return <RepairsScreen action={action} onActionDone={onActionDone} />;
+      case 'contractors':
+        return <ContractorsScreen />;
       case 'reporting':
         return <ReportingScreen />;
       default:
@@ -104,6 +107,7 @@ const App: React.FC = () => {
                 <SideNavItem tabName="properties" label="Properties" icon={<BuildingOfficeIcon />} />
                 <SideNavItem tabName="payments" label="Payments" icon={<CreditCardIcon />} />
                 <SideNavItem tabName="repairs" label="Repairs" icon={<WrenchScrewdriverIcon />} />
+                <SideNavItem tabName="contractors" label="Contractors" icon={<UsersIcon />} />
                 <SideNavItem tabName="reporting" label="Reporting" icon={<DocumentChartBarIcon />} />
             </nav>
         </aside>
@@ -119,7 +123,7 @@ const App: React.FC = () => {
         <NavItem tabName="properties" label="Properties" icon={<BuildingOfficeIcon className="w-6 h-6" />} />
         <NavItem tabName="payments" label="Payments" icon={<CreditCardIcon className="w-6 h-6" />} />
         <NavItem tabName="repairs" label="Repairs" icon={<WrenchScrewdriverIcon className="w-6 h-6" />} />
-        <NavItem tabName="reporting" label="Reporting" icon={<DocumentChartBarIcon className="w-6 h-6" />} />
+        <NavItem tabName="contractors" label="Contractors" icon={<UsersIcon className="w-6 h-6" />} />
       </nav>
       <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
     </div>

@@ -30,13 +30,18 @@ export interface Payment {
   paymentDate?: string; // ISO string for when the last payment part was made
 }
 
+export interface Contractor {
+  id: string;
+  name: string;
+  contact: string; // Could be phone, email, etc.
+}
+
 export interface Repair {
   id: string;
   propertyId: string;
   description: string;
   status: RepairStatus;
-  contractorName?: string;
-  contractorContact?: string;
+  contractorId?: string;
   cost: number; // This is the bill amount for the repair
   notes?: string;
   requestDate: string; // ISO string

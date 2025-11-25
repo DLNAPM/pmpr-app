@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useMemo } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
-import { Property, Payment, Repair, RepairStatus } from '../types';
+import { Property, Payment, Repair, RepairStatus, Contractor } from '../types';
 import { useAuth, User } from './AuthContext';
 
 // This is the initial data for a new GUEST user.
@@ -36,6 +36,10 @@ const initialGuestData = {
         }
     ],
     repairs: [],
+    contractors: [
+        { id: 'c1', name: 'Reliable Plumbing', contact: '555-PLUMBER' },
+        { id: 'c2', name: 'Sparky Electricians', contact: '555-SPARKY' }
+    ],
 };
 
 
@@ -43,6 +47,7 @@ interface AppContextType {
   properties: Property[];
   payments: Payment[];
   repairs: Repair[];
+  contractors: Contractor[];
   isLoading: boolean;
   addProperty: (property: Omit<Property, 'id'>) => void;
   updateProperty: (updatedProperty: Property) => void;
@@ -50,7 +55,10 @@ interface AppContextType {
   updatePayment: (updatedPayment: Payment) => void;
   addRepair: (repair: Omit<Repair, 'id'>) => void;
   updateRepair: (updatedRepair: Repair) => void;
+  addContractor: (contractor: Omit<Contractor, 'id'>) => Contractor;
+  updateContractor: (updatedContractor: Contractor) => void;
   getPropertyById: (id: string) => Property | undefined;
+  getContractorById: (id: string) => Contractor | undefined;
   getPaymentsForProperty: (propertyId: string) => Payment[];
   getRepairsForProperty: (propertyId: string) => Repair[];
   searchProperties: (query: string) => Property[];
@@ -64,10 +72,12 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const propertiesInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_properties') === null ? initialGuestData.properties : [], []);
     const paymentsInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_payments') === null ? initialGuestData.payments : [], []);
     const repairsInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_repairs') === null ? initialGuestData.repairs : [], []);
+    const contractorsInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_contractors') === null ? initialGuestData.contractors : [], []);
 
     const [properties, setProperties] = useLocalStorage<Property[]>('pmpr_guest_properties', propertiesInitialValue);
     const [payments, setPayments] = useLocalStorage<Payment[]>('pmpr_guest_payments', paymentsInitialValue);
     const [repairs, setRepairs] = useLocalStorage<Repair[]>('pmpr_guest_repairs', repairsInitialValue);
+    const [contractors, setContractors] = useLocalStorage<Contractor[]>('pmpr_guest_contractors', contractorsInitialValue);
     
     // Guest-specific data logic
     const addProperty = (property: Omit<Property, 'id'>) => setProperties(p => [...p, { ...property, id: crypto.randomUUID() }]);
@@ -76,10 +86,16 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const updatePayment = (updated: Payment) => setPayments(p => p.map(pay => pay.id === updated.id ? updated : pay));
     const addRepair = (repair: Omit<Repair, 'id'>) => setRepairs(r => [...r, { ...repair, id: crypto.randomUUID() }]);
     const updateRepair = (updated: Repair) => setRepairs(r => r.map(rep => rep.id === updated.id ? updated : rep));
-    
+    const addContractor = (contractor: Omit<Contractor, 'id'>) => {
+        const newContractor = { ...contractor, id: crypto.randomUUID() };
+        setContractors(c => [...c, newContractor]);
+        return newContractor;
+    };
+    const updateContractor = (updated: Contractor) => setContractors(c => c.map(con => con.id === updated.id ? updated : con));
+
     const value = useMemo(() => ({
-        properties, payments, repairs, addProperty, updateProperty, addPayment, updatePayment, addRepair, updateRepair
-    }), [properties, payments, repairs]);
+        properties, payments, repairs, contractors, addProperty, updateProperty, addPayment, updatePayment, addRepair, updateRepair, addContractor, updateContractor
+    }), [properties, payments, repairs, contractors]);
 
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
@@ -89,11 +105,12 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
     const propertiesKey = `pmpr_user_${user.id}_properties`;
     const paymentsKey = `pmpr_user_${user.id}_payments`;
     const repairsKey = `pmpr_user_${user.id}_repairs`;
+    const contractorsKey = `pmpr_user_${user.id}_contractors`;
 
-    // Authenticated users start with empty arrays if no data is in localStorage.
     const [properties, setProperties] = useLocalStorage<Property[]>(propertiesKey, []);
     const [payments, setPayments] = useLocalStorage<Payment[]>(paymentsKey, []);
     const [repairs, setRepairs] = useLocalStorage<Repair[]>(repairsKey, []);
+    const [contractors, setContractors] = useLocalStorage<Contractor[]>(contractorsKey, []);
     
     const addProperty = (property: Omit<Property, 'id'>) => setProperties(p => [...p, { ...property, id: crypto.randomUUID() }]);
     const updateProperty = (updated: Property) => setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
@@ -101,21 +118,27 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
     const updatePayment = (updated: Payment) => setPayments(p => p.map(pay => pay.id === updated.id ? updated : pay));
     const addRepair = (repair: Omit<Repair, 'id'>) => setRepairs(r => [...r, { ...repair, id: crypto.randomUUID() }]);
     const updateRepair = (updated: Repair) => setRepairs(r => r.map(rep => rep.id === updated.id ? updated : rep));
+    const addContractor = (contractor: Omit<Contractor, 'id'>) => {
+        const newContractor = { ...contractor, id: crypto.randomUUID() };
+        setContractors(c => [...c, newContractor]);
+        return newContractor;
+    };
+    const updateContractor = (updated: Contractor) => setContractors(c => c.map(con => con.id === updated.id ? updated : con));
 
     const value = useMemo(() => ({
-        properties, payments, repairs, addProperty, updateProperty, addPayment, updatePayment, addRepair, updateRepair
-    }), [properties, payments, repairs]);
+        properties, payments, repairs, contractors, addProperty, updateProperty, addPayment, updatePayment, addRepair, updateRepair, addContractor, updateContractor
+    }), [properties, payments, repairs, contractors]);
     
-    // isLoading is false because localStorage is synchronous.
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
 
 
 // This component contains the shared logic (getters, health score) that both providers use.
 const AppProviderLogic: React.FC<{data: any, isLoading: boolean, children: React.ReactNode}> = ({ data, isLoading, children }) => {
-    const { properties, payments, repairs } = data;
+    const { properties, payments, repairs, contractors } = data;
 
     const getPropertyById = (id: string) => properties.find((p: Property) => p.id === id);
+    const getContractorById = (id: string) => contractors.find((c: Contractor) => c.id === id);
     const getPaymentsForProperty = (propertyId: string) => payments.filter((p: Payment) => p.propertyId === propertyId);
     const getRepairsForProperty = (propertyId: string) => repairs.filter((r: Repair) => r.propertyId === propertyId);
     
@@ -138,7 +161,6 @@ const AppProviderLogic: React.FC<{data: any, isLoading: boolean, children: React
         const currentMonth = now.getMonth() + 1;
         const currentYear = now.getFullYear();
         propertyPayments.forEach((payment: Payment) => {
-            // Penalize for past-due payments
             if (payment.year < currentYear || (payment.year === currentYear && payment.month < currentMonth)) {
                 if (payment.rentPaidAmount < payment.rentBillAmount) {
                     score -= 10;
@@ -156,6 +178,7 @@ const AppProviderLogic: React.FC<{data: any, isLoading: boolean, children: React
         ...data,
         isLoading,
         getPropertyById,
+        getContractorById,
         getPaymentsForProperty,
         getRepairsForProperty,
         searchProperties,
@@ -177,8 +200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return <GuestDataProvider>{children}</GuestDataProvider>;
     }
 
-    // Render a provider with empty data while auth status is 'idle'
-    return <AppProviderLogic data={{ properties: [], payments: [], repairs: [], addProperty: () => {}, updateProperty: () => {}, addPayment: () => {}, updatePayment: () => {}, addRepair: () => {}, updateRepair: () => {} }} isLoading={true}>{children}</AppProviderLogic>;
+    return <AppProviderLogic data={{ properties: [], payments: [], repairs: [], contractors: [], addProperty: () => {}, updateProperty: () => {}, addPayment: () => {}, updatePayment: () => {}, addRepair: () => {}, updateRepair: () => {}, addContractor: () => ({id:'',name:'',contact:''}), updateContractor: () => {} }} isLoading={true}>{children}</AppProviderLogic>;
 };
 
 

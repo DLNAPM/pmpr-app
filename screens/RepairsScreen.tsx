@@ -2,31 +2,67 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
-import { Repair, RepairStatus } from '../types';
+import { Repair, RepairStatus, Contractor } from '../types';
 import { PlusIcon, WrenchScrewdriverIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { REPAIR_STATUS_OPTIONS } from '../constants';
 
+const ContractorForm: React.FC<{onSave: (contractor: Contractor) => void; onCancel: () => void;}> = ({ onSave, onCancel }) => {
+    const [name, setName] = useState('');
+    const [contact, setContact] = useState('');
+    
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (name && contact) {
+            onSave({ id: '', name, contact });
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+             <h4 className="font-semibold text-lg">Add New Contractor</h4>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Contractor Name" required className="w-full p-2 border rounded" />
+            <input type="text" value={contact} onChange={e => setContact(e.target.value)} placeholder="Contact Info (Phone/Email)" required className="w-full p-2 border rounded" />
+            <div className="flex justify-end gap-2 pt-4">
+                <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Save Contractor</button>
+            </div>
+        </form>
+    );
+}
+
 const RepairForm: React.FC<{
     repair?: Repair;
     properties: {id: string, name: string}[];
+    contractors: Contractor[];
     onSave: (repair: Omit<Repair, 'id'> | Repair) => void;
     onCancel: () => void;
-}> = ({ repair, properties, onSave, onCancel }) => {
+    onAddContractor: (contractor: Omit<Contractor, 'id'>) => Contractor;
+}> = ({ repair, properties, contractors, onSave, onCancel, onAddContractor }) => {
     const [formData, setFormData] = useState({
         propertyId: repair?.propertyId || (properties.length > 0 ? properties[0].id : ''),
         description: repair?.description || '',
         status: repair?.status || RepairStatus.PENDING_REPAIRMEN,
         cost: repair?.cost || 0,
-        contractorName: repair?.contractorName || '',
-        contractorContact: repair?.contractorContact || '',
+        contractorId: repair?.contractorId || '',
         notes: repair?.notes || '',
         repairDate: repair?.repairDate?.split('T')[0] || '',
     });
+    const [isAddingContractor, setIsAddingContractor] = useState(false);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({...prev, [name]: name === 'cost' ? parseFloat(value) || 0 : value }));
+        if (name === 'contractorId' && value === 'add_new') {
+            setIsAddingContractor(true);
+        } else {
+            setFormData(prev => ({...prev, [name]: name === 'cost' ? parseFloat(value) || 0 : value }));
+        }
+    };
+    
+    const handleSaveNewContractor = (newContractorData: Omit<Contractor, 'id'>) => {
+        const newContractor = onAddContractor(newContractorData);
+        setFormData(prev => ({ ...prev, contractorId: newContractor.id }));
+        setIsAddingContractor(false);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -43,6 +79,10 @@ const RepairForm: React.FC<{
         };
         onSave(repair ? { ...repairData, id: repair.id } : repairData);
     };
+
+    if (isAddingContractor) {
+        return <ContractorForm onSave={handleSaveNewContractor} onCancel={() => setIsAddingContractor(false)} />
+    }
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -63,9 +103,21 @@ const RepairForm: React.FC<{
                     <input id="repairDate" type="date" name="repairDate" value={formData.repairDate} onChange={handleChange} className="w-full p-2 border rounded mt-1" />
                 </div>
             </div>
-            <input type="number" name="cost" value={formData.cost} onChange={handleChange} placeholder="Cost" className="w-full p-2 border rounded" />
-            <input type="text" name="contractorName" value={formData.contractorName} onChange={handleChange} placeholder="Contractor Name" className="w-full p-2 border rounded" />
-            <input type="text" name="contractorContact" value={formData.contractorContact} onChange={handleChange} placeholder="Contractor Contact" className="w-full p-2 border rounded" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label htmlFor="cost" className="block text-sm font-medium text-gray-700">Cost</label>
+                    <input id="cost" type="number" name="cost" value={formData.cost} onChange={handleChange} placeholder="Cost" className="w-full p-2 border rounded mt-1" />
+                </div>
+                <div>
+                    <label htmlFor="contractorId" className="block text-sm font-medium text-gray-700">Contractor</label>
+                    <select id="contractorId" name="contractorId" value={formData.contractorId} onChange={handleChange} className="w-full p-2 border rounded mt-1">
+                        <option value="">Select a Contractor</option>
+                        {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        <option value="add_new" className="font-bold text-blue-600">-- Add New Contractor --</option>
+                    </select>
+                </div>
+            </div>
+            
             <textarea name="notes" value={formData.notes} onChange={handleChange} placeholder="Notes" rows={2} className="w-full p-2 border rounded" />
              <div className="flex justify-end gap-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
@@ -81,7 +133,7 @@ interface RepairsScreenProps {
 }
 
 const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, onActionDone }) => {
-    const { properties, repairs, addRepair, updateRepair, getPropertyById } = useAppContext();
+    const { properties, repairs, contractors, addRepair, updateRepair, addContractor, getPropertyById, getContractorById } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined);
 
@@ -147,6 +199,7 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, onActionDone }) =
                                 <div>
                                     <p className="font-bold text-blue-800">{getPropertyById(repair.propertyId)?.name || 'Unknown Property'}</p>
                                     <p className="mt-1">{repair.description}</p>
+                                    {repair.contractorId && <p className="text-sm text-gray-600 mt-1">Contractor: {getContractorById(repair.contractorId)?.name || 'N/A'}</p>}
                                     <div className="text-xs text-gray-500 mt-2 space-x-4">
                                       <span>Requested: {new Date(repair.requestDate).toLocaleDateString()}</span>
                                       {repair.repairDate && <span>Repaired: {new Date(repair.repairDate).toLocaleDateString()}</span>}
@@ -174,8 +227,10 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, onActionDone }) =
                 <RepairForm
                     repair={selectedRepair}
                     properties={properties.map(p => ({ id: p.id, name: p.name }))}
+                    contractors={contractors}
                     onSave={handleSave}
                     onCancel={() => setIsModalOpen(false)}
+                    onAddContractor={addContractor}
                 />
             </Modal>
         </div>
