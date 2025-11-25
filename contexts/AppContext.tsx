@@ -76,49 +76,32 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
 
-// This provider handles data for AUTHENTICATED users using API calls
+// This provider handles data for AUTHENTICATED users
 const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNode }> = ({ user, children }) => {
-    const [properties, setProperties] = useState<Property[]>([]);
-    const [payments, setPayments] = useState<Payment[]>([]);
-    const [repairs, setRepairs] = useState<Repair[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    // FIX: Switched from in-memory state to useLocalStorage to persist data for authenticated users across sessions.
+    // This correctly simulates a cloud-synced app and fixes the bug where data was lost on logout.
+    const propertiesKey = `pmpr_user_${user.id}_properties`;
+    const paymentsKey = `pmpr_user_${user.id}_payments`;
+    const repairsKey = `pmpr_user_${user.id}_repairs`;
 
-    useEffect(() => {
-        const loadData = async () => {
-            setIsLoading(true);
-            const props = await fetchPropertiesFromAPI(user);
-            setProperties(props);
-            setIsLoading(false);
-        };
-        loadData();
-    }, [user]);
-
-    // FIX: Implemented in-memory state management for authenticated users to simulate a real session.
-    // This resolves the bug where data would disappear after being added.
-    const addProperty = (property: Omit<Property, 'id'>) => {
-        setProperties(p => [...p, { ...property, id: crypto.randomUUID() }]);
-    };
-    const updateProperty = (updated: Property) => {
-        setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
-    };
-    const addPayment = (payment: Omit<Payment, 'id'>) => {
-        setPayments(p => [...p, { ...payment, id: crypto.randomUUID() }]);
-    };
-    const updatePayment = (updated: Payment) => {
-        setPayments(p => p.map(pay => pay.id === updated.id ? updated : pay));
-    };
-    const addRepair = (repair: Omit<Repair, 'id'>) => {
-        setRepairs(r => [...r, { ...repair, id: crypto.randomUUID() }]);
-    };
-    const updateRepair = (updated: Repair) => {
-        setRepairs(r => r.map(rep => rep.id === updated.id ? updated : rep));
-    };
+    // Authenticated users start with empty arrays if no data is in localStorage.
+    const [properties, setProperties] = useLocalStorage<Property[]>(propertiesKey, []);
+    const [payments, setPayments] = useLocalStorage<Payment[]>(paymentsKey, []);
+    const [repairs, setRepairs] = useLocalStorage<Repair[]>(repairsKey, []);
+    
+    const addProperty = (property: Omit<Property, 'id'>) => setProperties(p => [...p, { ...property, id: crypto.randomUUID() }]);
+    const updateProperty = (updated: Property) => setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
+    const addPayment = (payment: Omit<Payment, 'id'>) => setPayments(p => [...p, { ...payment, id: crypto.randomUUID() }]);
+    const updatePayment = (updated: Payment) => setPayments(p => p.map(pay => pay.id === updated.id ? updated : pay));
+    const addRepair = (repair: Omit<Repair, 'id'>) => setRepairs(r => [...r, { ...repair, id: crypto.randomUUID() }]);
+    const updateRepair = (updated: Repair) => setRepairs(r => r.map(rep => rep.id === updated.id ? updated : rep));
 
     const value = useMemo(() => ({
         properties, payments, repairs, addProperty, updateProperty, addPayment, updatePayment, addRepair, updateRepair
     }), [properties, payments, repairs]);
     
-    return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
+    // isLoading is false because localStorage is synchronous.
+    return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
 
 
