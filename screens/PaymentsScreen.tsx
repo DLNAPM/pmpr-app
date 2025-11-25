@@ -13,14 +13,14 @@ const PaymentForm: React.FC<{property: Property; onSave: (payment: Omit<Payment,
 
     const [year, setYear] = useState(currentYear);
     const [month, setMonth] = useState(currentMonth);
-    const [rentPaid, setRentPaid] = useState(false);
+    const [rentPaidAmount, setRentPaidAmount] = useState(0);
     const [utilities, setUtilities] = useState<UtilityPayment[]>(
-        property.utilitiesToTrack.map(u => ({ category: u, amount: 0, isPaid: false }))
+        property.utilitiesToTrack.map(u => ({ category: u, billAmount: 0, paidAmount: 0 }))
     );
 
     const handleUtilityChange = (index: number, field: keyof UtilityPayment, value: any) => {
         const newUtils = [...utilities];
-        newUtils[index] = { ...newUtils[index], [field]: value };
+        newUtils[index] = { ...newUtils[index], [field]: parseFloat(value) || 0 };
         setUtilities(newUtils);
     };
 
@@ -30,10 +30,10 @@ const PaymentForm: React.FC<{property: Property; onSave: (payment: Omit<Payment,
             propertyId: property.id,
             year,
             month,
-            rentAmount: property.rentAmount,
-            rentPaid,
+            rentBillAmount: property.rentAmount,
+            rentPaidAmount,
             utilities,
-            paymentDate: rentPaid || utilities.some(u=>u.isPaid) ? new Date().toISOString() : undefined,
+            paymentDate: rentPaidAmount > 0 || utilities.some(u => u.paidAmount > 0) ? new Date().toISOString() : undefined,
         });
     };
 
@@ -46,19 +46,20 @@ const PaymentForm: React.FC<{property: Property; onSave: (payment: Omit<Payment,
                 </select>
                 <input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full p-2 border rounded" />
             </div>
-            <div className="p-3 border rounded-lg">
-                <div className="flex items-center justify-between">
-                    <label htmlFor="rentPaid" className="font-medium">Rent: ${property.rentAmount}</label>
-                    <input type="checkbox" id="rentPaid" checked={rentPaid} onChange={(e) => setRentPaid(e.target.checked)} className="h-5 w-5 rounded text-blue-600 focus:ring-blue-500" />
+            <div className="p-3 border rounded-lg space-y-2">
+                <label className="font-medium">Rent</label>
+                <div className="grid grid-cols-2 gap-2">
+                    <input type="number" readOnly value={property.rentAmount} className="w-full p-2 border rounded bg-gray-100" placeholder="Bill Amount" />
+                    <input type="number" value={rentPaidAmount} onChange={(e) => setRentPaidAmount(parseFloat(e.target.value) || 0)} className="w-full p-2 border rounded" placeholder="Paid Amount" />
                 </div>
             </div>
             {utilities.map((util, index) => (
-                <div key={util.category} className="p-3 border rounded-lg">
-                    <div className="flex items-center justify-between">
-                        <label className="font-medium">{util.category}</label>
-                        <input type="checkbox" checked={util.isPaid} onChange={(e) => handleUtilityChange(index, 'isPaid', e.target.checked)} className="h-5 w-5 rounded text-blue-600 focus:ring-blue-500" />
+                <div key={util.category} className="p-3 border rounded-lg space-y-2">
+                     <label className="font-medium">{util.category}</label>
+                     <div className="grid grid-cols-2 gap-2">
+                        <input type="number" value={util.billAmount} onChange={(e) => handleUtilityChange(index, 'billAmount', e.target.value)} className="w-full p-2 border rounded" placeholder="Bill Amount"/>
+                        <input type="number" value={util.paidAmount} onChange={(e) => handleUtilityChange(index, 'paidAmount', e.target.value)} className="w-full p-2 border rounded" placeholder="Paid Amount"/>
                     </div>
-                    <input type="number" placeholder="Amount" value={util.amount} onChange={(e) => handleUtilityChange(index, 'amount', parseFloat(e.target.value) || 0)} className="w-full p-2 border rounded mt-2" />
                 </div>
             ))}
             <div className="flex justify-end gap-2 pt-4">
@@ -94,6 +95,12 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
         }
     }, [action, onActionDone, openModal]);
     
+    useEffect(() => {
+        if (!selectedPropertyId && properties.length > 0) {
+            setSelectedPropertyId(properties[0].id);
+        }
+    }, [properties, selectedPropertyId]);
+    
     const selectedProperty = useMemo(() => properties.find(p => p.id === selectedPropertyId), [properties, selectedPropertyId]);
     const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a,b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
 
@@ -105,6 +112,12 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
             addPayment(paymentData);
         }
         setIsModalOpen(false);
+    };
+
+    const getStatusInfo = (billed: number, paid: number) => {
+        if (paid >= billed && billed > 0) return { text: 'Paid', color: 'bg-green-100 text-green-800' };
+        if (paid > 0) return { text: 'Partially Paid', color: 'bg-yellow-100 text-yellow-800' };
+        return { text: 'Unpaid', color: 'bg-red-100 text-red-800' };
     };
     
     return (
@@ -127,32 +140,38 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
 
             {selectedProperty ? (
                 <div className="space-y-4">
-                    {propertyPayments.map(payment => (
-                        <Card key={payment.id}>
-                            <CardHeader>
-                                <h3 className="font-bold text-lg">{MONTHS[payment.month - 1]} {payment.year}</h3>
-                            </CardHeader>
-                            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className={`p-3 rounded-lg ${payment.rentPaid ? 'bg-green-100' : 'bg-red-100'}`}>
-                                    <p className="font-semibold">Rent</p>
-                                    <p>Amount: ${payment.rentAmount}</p>
-                                    <p>Status: <span className="font-bold">{payment.rentPaid ? 'Paid' : 'Unpaid'}</span></p>
-                                </div>
-                                <div className="space-y-2">
-                                    <p className="font-semibold">Utilities</p>
-                                    {payment.utilities.map(util => (
-                                        <div key={util.category} className="flex justify-between items-center text-sm">
-                                            <span>{util.category}: ${util.amount}</span>
-                                            <span className={`px-2 py-0.5 rounded-full text-xs ${util.isPaid ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
-                                                {util.isPaid ? 'Paid' : 'Unpaid'}
-                                            </span>
-                                        </div>
-                                    ))}
-                                     {payment.utilities.length === 0 && <p className="text-xs text-gray-500">No utilities tracked for this property.</p>}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                    {propertyPayments.map(payment => {
+                        const rentStatus = getStatusInfo(payment.rentBillAmount, payment.rentPaidAmount);
+                        return (
+                            <Card key={payment.id}>
+                                <CardHeader>
+                                    <h3 className="font-bold text-lg">{MONTHS[payment.month - 1]} {payment.year}</h3>
+                                </CardHeader>
+                                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className={`p-3 rounded-lg ${rentStatus.color}`}>
+                                        <p className="font-semibold">Rent</p>
+                                        <p>Billed: ${payment.rentBillAmount.toFixed(2)}</p>
+                                        <p>Paid: ${payment.rentPaidAmount.toFixed(2)}</p>
+                                        <p>Status: <span className="font-bold">{rentStatus.text}</span></p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <p className="font-semibold">Utilities</p>
+                                        {payment.utilities.map(util => {
+                                            const utilStatus = getStatusInfo(util.billAmount, util.paidAmount);
+                                            return (
+                                            <div key={util.category} className="flex justify-between items-center text-sm">
+                                                <span>{util.category}: ${util.paidAmount.toFixed(2)} / ${util.billAmount.toFixed(2)}</span>
+                                                <span className={`px-2 py-0.5 rounded-full text-xs ${utilStatus.color}`}>
+                                                    {utilStatus.text}
+                                                </span>
+                                            </div>
+                                        )})}
+                                         {payment.utilities.length === 0 && <p className="text-xs text-gray-500">No utilities tracked for this property.</p>}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )
+                    })}
                     {propertyPayments.length === 0 && (
                         <div className="text-center py-10 text-gray-500">
                             <CreditCardIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>

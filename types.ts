@@ -15,8 +15,8 @@ export interface Tenant {
 
 export interface UtilityPayment {
   category: string;
-  amount: number;
-  isPaid: boolean;
+  billAmount: number;
+  paidAmount: number;
 }
 
 export interface Payment {
@@ -24,10 +24,10 @@ export interface Payment {
   propertyId: string;
   month: number; // 1-12
   year: number;
-  rentAmount: number;
-  rentPaid: boolean;
+  rentBillAmount: number;
+  rentPaidAmount: number;
   utilities: UtilityPayment[];
-  paymentDate?: string; // ISO string
+  paymentDate?: string; // ISO string for when the last payment part was made
 }
 
 export interface Repair {
@@ -37,10 +37,11 @@ export interface Repair {
   status: RepairStatus;
   contractorName?: string;
   contractorContact?: string;
-  cost: number;
+  cost: number; // This is the bill amount for the repair
   notes?: string;
   requestDate: string; // ISO string
-  completionDate?: string; // ISO string
+  repairDate?: string; // ISO string for when the repair was done
+  completionDate?: string; // ISO string for when status became 'Complete'
 }
 
 export interface Property {
@@ -51,6 +52,6 @@ export interface Property {
   leaseStart: string; // ISO string
   leaseEnd: string; // ISO string
   securityDeposit: number;
-  rentAmount: number;
+  rentAmount: number; // This is the standard monthly rent bill amount
   utilitiesToTrack: string[];
 }

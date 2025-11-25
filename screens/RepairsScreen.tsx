@@ -21,6 +21,7 @@ const RepairForm: React.FC<{
         contractorName: repair?.contractorName || '',
         contractorContact: repair?.contractorContact || '',
         notes: repair?.notes || '',
+        repairDate: repair?.repairDate?.split('T')[0] || '',
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -37,6 +38,7 @@ const RepairForm: React.FC<{
         const repairData = {
             ...formData,
             requestDate: repair?.requestDate || new Date().toISOString(),
+            repairDate: formData.repairDate ? new Date(formData.repairDate).toISOString() : undefined,
             completionDate: formData.status === RepairStatus.COMPLETE && !repair?.completionDate ? new Date().toISOString() : repair?.completionDate,
         };
         onSave(repair ? { ...repairData, id: repair.id } : repairData);
@@ -49,9 +51,18 @@ const RepairForm: React.FC<{
                 {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             <textarea name="description" value={formData.description} onChange={handleChange} placeholder="Description of issue" required rows={3} className="w-full p-2 border rounded" />
-            <select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded">
-                {REPAIR_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label htmlFor="status" className="block text-sm font-medium text-gray-700">Status</label>
+                    <select id="status" name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded mt-1">
+                        {REPAIR_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="repairDate" className="block text-sm font-medium text-gray-700">Repair Date</label>
+                    <input id="repairDate" type="date" name="repairDate" value={formData.repairDate} onChange={handleChange} className="w-full p-2 border rounded mt-1" />
+                </div>
+            </div>
             <input type="number" name="cost" value={formData.cost} onChange={handleChange} placeholder="Cost" className="w-full p-2 border rounded" />
             <input type="text" name="contractorName" value={formData.contractorName} onChange={handleChange} placeholder="Contractor Name" className="w-full p-2 border rounded" />
             <input type="text" name="contractorContact" value={formData.contractorContact} onChange={handleChange} placeholder="Contractor Contact" className="w-full p-2 border rounded" />
@@ -136,7 +147,10 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, onActionDone }) =
                                 <div>
                                     <p className="font-bold text-blue-800">{getPropertyById(repair.propertyId)?.name || 'Unknown Property'}</p>
                                     <p className="mt-1">{repair.description}</p>
-                                    <p className="text-xs text-gray-500 mt-2">Requested: {new Date(repair.requestDate).toLocaleDateString()}</p>
+                                    <div className="text-xs text-gray-500 mt-2 space-x-4">
+                                      <span>Requested: {new Date(repair.requestDate).toLocaleDateString()}</span>
+                                      {repair.repairDate && <span>Repaired: {new Date(repair.repairDate).toLocaleDateString()}</span>}
+                                    </div>
                                 </div>
                                 <div className="flex-shrink-0 text-right">
                                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(repair.status)}`}>

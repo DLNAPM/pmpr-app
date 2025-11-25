@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
+// FIX: Use Firebase compat library to resolve module import errors.
+import firebase from "firebase/compat/app";
 import { auth } from '../firebaseConfig';
 
 
@@ -28,7 +29,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+    // FIX: Use compat syntax for onAuthStateChanged and firebase.User type.
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser: firebase.User | null) => {
       if (firebaseUser) {
         const { uid, displayName, email } = firebaseUser;
         if (displayName && email) {
@@ -56,15 +58,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = () => {
-    const provider = new GoogleAuthProvider();
+    // FIX: Use compat syntax for GoogleAuthProvider.
+    const provider = new firebase.auth.GoogleAuthProvider();
     setAuthStatus('loading');
-    signInWithPopup(auth, provider)
+    // FIX: Use compat syntax for signInWithPopup.
+    auth.signInWithPopup(provider)
         .then((result) => {
-            const { uid, displayName, email } = result.user;
-            if (displayName && email) {
-                setUser({ id: uid, name: displayName, email });
-                setAuthStatus('authenticated');
-                sessionStorage.removeItem('pmpr_authStatus'); // Clean up guest status
+            // FIX: Add null check for result.user, which is nullable in compat mode.
+            if (result.user) {
+              const { uid, displayName, email } = result.user;
+              if (displayName && email) {
+                  setUser({ id: uid, name: displayName, email });
+                  setAuthStatus('authenticated');
+                  sessionStorage.removeItem('pmpr_authStatus'); // Clean up guest status
+              }
             }
         })
         .catch((error) => {
@@ -76,7 +83,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const continueAsGuest = () => {
     // Ensure any potential Firebase session is signed out before proceeding as guest.
     if (auth.currentUser) {
-        signOut(auth);
+        // FIX: Use compat syntax for signOut.
+        auth.signOut();
     }
     setUser(null);
     setAuthStatus('guest');
@@ -84,7 +92,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    signOut(auth).then(() => {
+    // FIX: Use compat syntax for signOut.
+    auth.signOut().then(() => {
       setUser(null);
       setAuthStatus('idle');
       sessionStorage.removeItem('pmpr_authStatus');

@@ -1,5 +1,7 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+
+// FIX: Switched to Firebase compat libraries to resolve module import errors.
+import firebase from "firebase/compat/app";
+import "firebase/compat/auth";
 
 // --- IMPORTANT ---
 // This app reads Firebase credentials from environment variables.
@@ -7,8 +9,8 @@ import { getAuth } from "firebase/auth";
 // Example: FIREBASE_API_KEY=your_api_key
 
 const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  apiKey: "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo",
+  // FIX: Provide a fallback for the API key to prevent crashes if the env var is not set.
+  apiKey: process.env.FIREBASE_API_KEY || "MISSING_API_KEY",
   authDomain: "pmpr-app.firebaseapp.com",
   projectId: "pmpr-app",
   storageBucket: "pmpr-app.firebasestorage.app",
@@ -31,7 +33,9 @@ if (firebaseConfig.apiKey === "MISSING_API_KEY") {
 
 // Initialize Firebase
 // Using fallbacks ensures initializeApp doesn't crash the app on startup.
-const app = initializeApp(firebaseConfig);
+// FIX: Use compat syntax for initialization.
+const app = firebase.initializeApp(firebaseConfig);
 
 // Initialize Firebase Authentication and get a reference to the service
-export const auth = getAuth(app);
+// FIX: Use compat syntax to get auth service.
+export const auth = firebase.auth();

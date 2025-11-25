@@ -1,15 +1,8 @@
-import React, { createContext, useContext, useMemo, useEffect, useState } from 'react';
+
+import React, { createContext, useContext, useMemo } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus } from '../types';
 import { useAuth, User } from './AuthContext';
-
-// --- API Function Placeholders ---
-// In a real application, these functions would make network requests to your backend.
-const fetchPropertiesFromAPI = async (user: User): Promise<Property[]> => {
-  console.log(`FETCHING properties for user ${user.id}`);
-  // For the demo, authenticated users start with a clean slate.
-  return []; 
-};
 
 // This is the initial data for a new GUEST user.
 const initialGuestData = {
@@ -26,7 +19,22 @@ const initialGuestData = {
             utilitiesToTrack: ['Water', 'Electricity', 'Internet'],
         },
     ],
-    payments: [],
+    payments: [
+        {
+            id: 'payment1',
+            propertyId: 'prop1',
+            month: new Date().getMonth(), // Last month
+            year: new Date().getFullYear(),
+            rentBillAmount: 1500,
+            rentPaidAmount: 1500,
+            utilities: [
+                { category: 'Water', billAmount: 50, paidAmount: 50 },
+                { category: 'Electricity', billAmount: 85, paidAmount: 85 },
+                { category: 'Internet', billAmount: 60, paidAmount: 0 },
+            ],
+            paymentDate: new Date().toISOString()
+        }
+    ],
     repairs: [],
 };
 
@@ -78,8 +86,6 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
 // This provider handles data for AUTHENTICATED users
 const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNode }> = ({ user, children }) => {
-    // FIX: Switched from in-memory state to useLocalStorage to persist data for authenticated users across sessions.
-    // This correctly simulates a cloud-synced app and fixes the bug where data was lost on logout.
     const propertiesKey = `pmpr_user_${user.id}_properties`;
     const paymentsKey = `pmpr_user_${user.id}_payments`;
     const repairsKey = `pmpr_user_${user.id}_repairs`;
@@ -132,11 +138,14 @@ const AppProviderLogic: React.FC<{data: any, isLoading: boolean, children: React
         const currentMonth = now.getMonth() + 1;
         const currentYear = now.getFullYear();
         propertyPayments.forEach((payment: Payment) => {
-            if (!payment.rentPaid && (payment.year < currentYear || (payment.year === currentYear && payment.month < currentMonth))) {
-                score -= 10;
+            // Penalize for past-due payments
+            if (payment.year < currentYear || (payment.year === currentYear && payment.month < currentMonth)) {
+                if (payment.rentPaidAmount < payment.rentBillAmount) {
+                    score -= 10;
+                }
+                const unpaidUtils = payment.utilities.filter(u => u.paidAmount < u.billAmount).length;
+                score -= unpaidUtils * 2;
             }
-            const unpaidUtils = payment.utilities.filter(u => !u.isPaid).length;
-            score -= unpaidUtils * 2;
         });
         const openRepairs = propertyRepairs.filter((r: Repair) => r.status !== RepairStatus.COMPLETE).length;
         score -= openRepairs * 5;

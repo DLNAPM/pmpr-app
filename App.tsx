@@ -5,11 +5,12 @@ import DashboardScreen from './screens/DashboardScreen';
 import PropertiesScreen from './screens/PropertiesScreen';
 import PaymentsScreen from './screens/PaymentsScreen';
 import RepairsScreen from './screens/RepairsScreen';
-import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon } from './components/Icons';
+import ReportingScreen from './screens/ReportingScreen';
+import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 
-type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs';
+type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'reporting';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -37,6 +38,8 @@ const App: React.FC = () => {
         return <PaymentsScreen action={action} onActionDone={onActionDone} />;
       case 'repairs':
         return <RepairsScreen action={action} onActionDone={onActionDone} />;
+      case 'reporting':
+        return <ReportingScreen />;
       default:
         return <DashboardScreen onAction={handleAction} />;
     }
@@ -54,7 +57,6 @@ const App: React.FC = () => {
     </button>
   );
 
-  // FIX: Changed icon prop type to be more specific to solve a TypeScript error with React.cloneElement.
   const SideNavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactElement<{ className?: string }> }> = ({ tabName, label, icon }) => (
     <button
       onClick={() => setActiveTab(tabName)}
@@ -98,6 +100,7 @@ const App: React.FC = () => {
                 <SideNavItem tabName="properties" label="Properties" icon={<BuildingOfficeIcon />} />
                 <SideNavItem tabName="payments" label="Payments" icon={<CreditCardIcon />} />
                 <SideNavItem tabName="repairs" label="Repairs" icon={<WrenchScrewdriverIcon />} />
+                <SideNavItem tabName="reporting" label="Reporting" icon={<DocumentChartBarIcon />} />
             </nav>
         </aside>
         
@@ -112,6 +115,7 @@ const App: React.FC = () => {
         <NavItem tabName="properties" label="Properties" icon={<BuildingOfficeIcon className="w-6 h-6" />} />
         <NavItem tabName="payments" label="Payments" icon={<CreditCardIcon className="w-6 h-6" />} />
         <NavItem tabName="repairs" label="Repairs" icon={<WrenchScrewdriverIcon className="w-6 h-6" />} />
+        <NavItem tabName="reporting" label="Reporting" icon={<DocumentChartBarIcon className="w-6 h-6" />} />
       </nav>
     </div>
   );

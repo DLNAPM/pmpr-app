@@ -6,7 +6,7 @@ import { useAppContext } from '../contexts/AppContext';
 import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon, CurrencyDollarIcon, ArrowTopRightOnSquareIcon } from '../components/Icons';
 
 interface DashboardScreenProps {
-  onAction: (tab: 'properties' | 'payments' | 'repairs', action?: string) => void;
+  onAction: (tab: 'properties' | 'payments' | 'repairs' | 'reporting', action?: string) => void;
 }
 
 // Helper to generate a deterministic, fake property value for the demo
@@ -28,7 +28,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
 
     const summary = useMemo(() => {
         let totalCollected = 0;
-        let totalOutstanding = 0;
+        let totalBilled = 0;
         let categoryBreakdown: { [key: string]: { paid: number, total: number } } = {};
 
         const now = new Date();
@@ -36,33 +36,27 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
         const currentYear = now.getFullYear();
 
         payments.filter(p => p.year === currentYear && p.month === currentMonth).forEach(p => {
-            if (p.rentPaid) {
-                totalCollected += p.rentAmount;
-                if (!categoryBreakdown['Rent']) categoryBreakdown['Rent'] = { paid: 0, total: 0 };
-                categoryBreakdown['Rent'].paid += p.rentAmount;
-            } else {
-                totalOutstanding += p.rentAmount;
-            }
+            totalCollected += p.rentPaidAmount;
+            totalBilled += p.rentBillAmount;
+            
             if (!categoryBreakdown['Rent']) categoryBreakdown['Rent'] = { paid: 0, total: 0 };
-            categoryBreakdown['Rent'].total += p.rentAmount;
+            categoryBreakdown['Rent'].paid += p.rentPaidAmount;
+            categoryBreakdown['Rent'].total += p.rentBillAmount;
 
             p.utilities.forEach(u => {
-                if (u.isPaid) {
-                    totalCollected += u.amount;
-                    if (!categoryBreakdown[u.category]) categoryBreakdown[u.category] = { paid: 0, total: 0 };
-                    categoryBreakdown[u.category].paid += u.amount;
-                } else {
-                    totalOutstanding += u.amount;
-                }
+                totalCollected += u.paidAmount;
+                totalBilled += u.billAmount;
+
                 if (!categoryBreakdown[u.category]) categoryBreakdown[u.category] = { paid: 0, total: 0 };
-                categoryBreakdown[u.category].total += u.amount;
+                categoryBreakdown[u.category].paid += u.paidAmount;
+                categoryBreakdown[u.category].total += u.billAmount;
             });
         });
 
-        const totalDue = totalCollected + totalOutstanding;
-        const overallCollectionRate = totalDue > 0 ? (totalCollected / totalDue) * 100 : 100;
+        const totalOutstanding = totalBilled - totalCollected;
+        const overallCollectionRate = totalBilled > 0 ? (totalCollected / totalBilled) * 100 : 100;
 
-        return { totalCollected, totalOutstanding, totalDue, overallCollectionRate, categoryBreakdown };
+        return { totalCollected, totalOutstanding, totalDue: totalBilled, overallCollectionRate, categoryBreakdown };
     }, [payments]);
     
     const sortedProperties = useMemo(() => {
@@ -123,7 +117,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <Card><CardContent><p className="text-sm text-gray-500">Total Collected</p><p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalCollected)}</p></CardContent></Card>
                     <Card><CardContent><p className="text-sm text-gray-500">Outstanding</p><p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalOutstanding)}</p></CardContent></Card>
-                    <Card><CardContent><p className="text-sm text-gray-500">Total Due</p><p className="text-2xl font-bold text-blue-800">{formatCurrency(summary.totalDue)}</p></CardContent></Card>
+                    <Card><CardContent><p className="text-sm text-gray-500">Total Billed</p><p className="text-2xl font-bold text-blue-800">{formatCurrency(summary.totalDue)}</p></CardContent></Card>
                 </div>
 
                 {/* Overall Collection */}
