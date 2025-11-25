@@ -1,22 +1,32 @@
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Payment, Property, UtilityPayment } from '../types';
 import Modal from '../components/Modal';
-import { CreditCardIcon, PlusIcon } from '../components/Icons';
+import { CreditCardIcon, PlusIcon, PencilSquareIcon } from '../components/Icons';
 import { MONTHS } from '../constants';
 
-const PaymentForm: React.FC<{property: Property; onSave: (payment: Omit<Payment, 'id'>) => void; onCancel: () => void;}> = ({ property, onSave, onCancel }) => {
+const PaymentForm: React.FC<{
+    property: Property; 
+    payment?: Payment;
+    onSave: (payment: Omit<Payment, 'id'> | Payment) => void; 
+    onCancel: () => void;
+}> = ({ property, payment, onSave, onCancel }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth() + 1;
 
-    const [year, setYear] = useState(currentYear);
-    const [month, setMonth] = useState(currentMonth);
-    const [rentPaidAmount, setRentPaidAmount] = useState(0);
-    const [utilities, setUtilities] = useState<UtilityPayment[]>(
-        property.utilitiesToTrack.map(u => ({ category: u, billAmount: 0, paidAmount: 0 }))
-    );
+    const [year, setYear] = useState(payment?.year || currentYear);
+    const [month, setMonth] = useState(payment?.month || currentMonth);
+    const [rentPaidAmount, setRentPaidAmount] = useState(payment?.rentPaidAmount || 0);
+    const [utilities, setUtilities] = useState<UtilityPayment[]>(() => {
+        if (payment?.utilities) {
+            const savedUtils = new Map(payment.utilities.map(u => [u.category, u]));
+            return property.utilitiesToTrack.map(category => 
+                savedUtils.get(category) || { category, billAmount: 0, paidAmount: 0 }
+            );
+        }
+        return property.utilitiesToTrack.map(u => ({ category: u, billAmount: 0, paidAmount: 0 }));
+    });
 
     const handleUtilityChange = (index: number, field: keyof UtilityPayment, value: any) => {
         const newUtils = [...utilities];
@@ -26,25 +36,31 @@ const PaymentForm: React.FC<{property: Property; onSave: (payment: Omit<Payment,
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave({
+        const paymentData = {
             propertyId: property.id,
             year,
             month,
             rentBillAmount: property.rentAmount,
             rentPaidAmount,
             utilities,
-            paymentDate: rentPaidAmount > 0 || utilities.some(u => u.paidAmount > 0) ? new Date().toISOString() : undefined,
-        });
+            paymentDate: rentPaidAmount > 0 || utilities.some(u => u.paidAmount > 0) ? (payment?.paymentDate || new Date().toISOString()) : undefined,
+        };
+        
+        if (payment) {
+            onSave({ ...payment, ...paymentData });
+        } else {
+            onSave(paymentData);
+        }
     };
 
     return (
          <form onSubmit={handleSubmit} className="space-y-4">
             <h3 className="text-lg font-semibold">{property.name}</h3>
             <div className="grid grid-cols-2 gap-4">
-                <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full p-2 border rounded">
+                <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full p-2 border rounded" disabled={!!payment}>
                     {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
-                <input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full p-2 border rounded" />
+                <input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full p-2 border rounded" disabled={!!payment} />
             </div>
             
             <div className="grid grid-cols-2 gap-2 mb-1 px-3">
@@ -70,7 +86,9 @@ const PaymentForm: React.FC<{property: Property; onSave: (payment: Omit<Payment,
             ))}
             <div className="flex justify-end gap-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Record Payment</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">
+                    {payment ? 'Save Changes' : 'Record Payment'}
+                </button>
             </div>
         </form>
     );
@@ -85,21 +103,28 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
     const { properties, payments, getPaymentsForProperty, addPayment, updatePayment } = useAppContext();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>(undefined);
     
-    const openModal = useCallback(() => {
+    const openAddModal = useCallback(() => {
         if (properties.length > 0) {
+            setSelectedPayment(undefined);
             setIsModalOpen(true);
         } else {
             alert("You must add a property before you can record a payment.");
         }
     }, [properties.length]);
+    
+    const openEditModal = (payment: Payment) => {
+        setSelectedPayment(payment);
+        setIsModalOpen(true);
+    };
 
     useEffect(() => {
         if (action === 'add') {
-          openModal();
+          openAddModal();
           onActionDone();
         }
-    }, [action, onActionDone, openModal]);
+    }, [action, onActionDone, openAddModal]);
     
     useEffect(() => {
         if (!selectedPropertyId && properties.length > 0) {
@@ -110,18 +135,24 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
     const selectedProperty = useMemo(() => properties.find(p => p.id === selectedPropertyId), [properties, selectedPropertyId]);
     const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a,b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
 
-    const handleSavePayment = (paymentData: Omit<Payment, 'id'>) => {
-        const existing = payments.find(p => p.propertyId === paymentData.propertyId && p.year === paymentData.year && p.month === paymentData.month);
-        if (existing) {
-            updatePayment({ ...existing, ...paymentData });
+    const handleSavePayment = (paymentData: Omit<Payment, 'id'> | Payment) => {
+        if ('id' in paymentData) {
+            updatePayment(paymentData);
         } else {
-            addPayment(paymentData);
+            const existing = payments.find(p => p.propertyId === paymentData.propertyId && p.year === paymentData.year && p.month === paymentData.month);
+            if (existing) {
+                updatePayment({ ...existing, ...paymentData });
+            } else {
+                addPayment(paymentData);
+            }
         }
         setIsModalOpen(false);
+        setSelectedPayment(undefined);
     };
 
     const getStatusInfo = (billed: number, paid: number) => {
-        if (paid >= billed && billed > 0) return { text: 'Paid', color: 'bg-green-100 text-green-800' };
+        if (billed === 0 && paid === 0) return { text: 'Not Billed', color: 'bg-gray-100 text-gray-800' };
+        if (paid >= billed) return { text: 'Paid', color: 'bg-green-100 text-green-800' };
         if (paid > 0) return { text: 'Partially Paid', color: 'bg-yellow-100 text-yellow-800' };
         return { text: 'Unpaid', color: 'bg-red-100 text-red-800' };
     };
@@ -137,7 +168,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
                             <option key={prop.id} value={prop.id}>{prop.name}</option>
                         ))}
                     </select>
-                    <button onClick={openModal} disabled={!selectedProperty} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                    <button onClick={openAddModal} disabled={!selectedProperty} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                         <PlusIcon className="w-5 h-5" />
                         Record
                     </button>
@@ -150,8 +181,15 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
                         const rentStatus = getStatusInfo(payment.rentBillAmount, payment.rentPaidAmount);
                         return (
                             <Card key={payment.id}>
-                                <CardHeader>
+                                <CardHeader className="flex justify-between items-center">
                                     <h3 className="font-bold text-lg">{MONTHS[payment.month - 1]} {payment.year}</h3>
+                                    <button 
+                                        onClick={() => openEditModal(payment)}
+                                        className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors"
+                                        aria-label="Edit Payment"
+                                    >
+                                        <PencilSquareIcon className="w-5 h-5"/>
+                                    </button>
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className={`p-3 rounded-lg ${rentStatus.color}`}>
@@ -193,9 +231,10 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
             )}
 
             {selectedProperty && (
-                <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Record Payment">
+                <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedPayment ? "Edit Payment" : "Record Payment"}>
                     <PaymentForm 
-                        property={selectedProperty} 
+                        property={selectedProperty}
+                        payment={selectedPayment}
                         onSave={handleSavePayment}
                         onCancel={() => setIsModalOpen(false)}
                     />
