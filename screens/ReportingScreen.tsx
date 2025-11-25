@@ -1,8 +1,9 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useAppContext } from '../contexts/AppContext';
-import { Property, Tenant } from '../types';
+import { Property, Tenant, Payment, RepairStatus } from '../types';
 import Card, { CardContent, CardHeader } from '../components/Card';
+import { ArrowDownTrayIcon, ArrowUpTrayIcon } from '../components/Icons';
+import Modal from '../components/Modal';
 
 interface ReportItem {
     date: string;
@@ -15,8 +16,23 @@ interface ReportItem {
     balance: number;
 }
 
+interface CsvRow {
+    Date: string;
+    'Property Name': string;
+    Type: 'Rent' | 'Utility' | 'Repair';
+    Category: string;
+    'Bill Amount': number;
+    'Paid Amount': number;
+}
+
+interface ImportPreview {
+    validRecords: CsvRow[];
+    errors: { row: number; message: string }[];
+}
+
+
 const ReportingScreen: React.FC = () => {
-    const { properties, payments, repairs } = useAppContext();
+    const { properties, payments, repairs, addPayment, updatePayment, addRepair } = useAppContext();
     
     const [filters, setFilters] = useState({
         type: 'all',
@@ -25,6 +41,11 @@ const ReportingScreen: React.FC = () => {
         startDate: '',
         endDate: '',
     });
+    
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -47,7 +68,6 @@ const ReportingScreen: React.FC = () => {
             const property = properties.find(prop => prop.id === p.propertyId);
             if (!property) return;
 
-            // Add rent item
             allItems.push({
                 date: new Date(p.year, p.month - 1, 1).toISOString(),
                 propertyName: property.name,
@@ -59,7 +79,6 @@ const ReportingScreen: React.FC = () => {
                 balance: p.rentBillAmount - p.rentPaidAmount,
             });
 
-            // Add utility items
             p.utilities.forEach(u => {
                 allItems.push({
                     date: new Date(p.year, p.month - 1, 1).toISOString(),
@@ -84,7 +103,7 @@ const ReportingScreen: React.FC = () => {
                 type: 'Repair',
                 category: r.description.substring(0, 30),
                 billAmount: r.cost,
-                paidAmount: r.status === 'Complete' ? r.cost : 0, // Assuming cost is paid on completion for reporting
+                paidAmount: r.status === 'Complete' ? r.cost : 0,
                 balance: r.status === 'Complete' ? 0 : r.cost,
             });
         });
@@ -101,7 +120,6 @@ const ReportingScreen: React.FC = () => {
             const itemDate = new Date(item.date);
             if (startDate && itemDate < startDate) return false;
             if (endDate) {
-                // include the whole day
                 const endOfDay = new Date(endDate);
                 endOfDay.setHours(23, 59, 59, 999);
                 if (itemDate > endOfDay) return false;
@@ -120,12 +138,179 @@ const ReportingScreen: React.FC = () => {
             return acc;
         }, { billAmount: 0, paidAmount: 0, balance: 0 });
     }, [filteredData]);
+    
+    const handleExport = () => {
+        const headers = ['Date', 'Property Name', 'Tenant Name', 'Type', 'Category', 'Bill Amount', 'Paid Amount', 'Balance'];
+        const rows = filteredData.map(item => [
+            new Date(item.date).toLocaleDateString(),
+            item.propertyName,
+            item.tenantName || 'N/A',
+            item.type,
+            item.category,
+            item.billAmount,
+            item.paidAmount,
+            item.balance
+        ].join(','));
+
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        const date = new Date().toISOString().split('T')[0];
+        link.setAttribute('download', `pmpr_report_${date}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+    
+    const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            processCsv(text);
+        };
+        reader.readAsText(file);
+    };
+
+    const processCsv = (csvText: string) => {
+        const lines = csvText.split(/\r\n|\n/).filter(line => line.trim());
+        if (lines.length < 2) {
+            alert('CSV file must have a header row and at least one data row.');
+            return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const requiredHeaders = ['Date', 'Property Name', 'Type', 'Category', 'Bill Amount', 'Paid Amount'];
+        if (!requiredHeaders.every(h => headers.includes(h))) {
+            alert(`CSV is missing required headers. Must include: ${requiredHeaders.join(', ')}`);
+            return;
+        }
+
+        const preview: ImportPreview = { validRecords: [], errors: [] };
+        const propertyMap = new Map(properties.map(p => [p.name.toLowerCase(), p]));
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',');
+            const rowData: any = {};
+            headers.forEach((header, index) => {
+                rowData[header] = values[index]?.trim();
+            });
+            
+            const property = propertyMap.get(rowData['Property Name']?.toLowerCase());
+            if (!property) {
+                preview.errors.push({ row: i + 1, message: `Property '${rowData['Property Name']}' not found.` });
+                continue;
+            }
+            if (!['Rent', 'Utility', 'Repair'].includes(rowData.Type)) {
+                 preview.errors.push({ row: i + 1, message: `Invalid Type '${rowData.Type}'. Must be Rent, Utility, or Repair.` });
+                continue;
+            }
+            if (isNaN(parseFloat(rowData['Bill Amount'])) || isNaN(parseFloat(rowData['Paid Amount']))) {
+                 preview.errors.push({ row: i + 1, message: `Bill Amount or Paid Amount is not a valid number.` });
+                continue;
+            }
+
+            preview.validRecords.push({
+                ...rowData,
+                'Bill Amount': parseFloat(rowData['Bill Amount']),
+                'Paid Amount': parseFloat(rowData['Paid Amount']),
+            });
+        }
+        
+        setImportPreview(preview);
+        setIsImportModalOpen(true);
+        if(fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
+    };
+
+    const handleConfirmImport = () => {
+        if (!importPreview?.validRecords) return;
+        
+        const paymentsToUpdate = new Map<string, Payment>();
+        
+        importPreview.validRecords.forEach(record => {
+            const property = properties.find(p => p.name === record['Property Name']);
+            if (!property) return;
+            
+            if (record.Type === 'Repair') {
+                addRepair({
+                    propertyId: property.id,
+                    description: record.Category,
+                    status: record['Paid Amount'] >= record['Bill Amount'] ? RepairStatus.COMPLETE : RepairStatus.PENDING_REPAIRMEN,
+                    cost: record['Bill Amount'],
+                    requestDate: new Date(record.Date).toISOString(),
+                    completionDate: record['Paid Amount'] >= record['Bill Amount'] ? new Date(record.Date).toISOString() : undefined
+                });
+            } else { // Rent or Utility
+                const date = new Date(record.Date);
+                const year = date.getFullYear();
+                const month = date.getMonth() + 1;
+                const paymentKey = `${property.id}-${year}-${month}`;
+
+                let payment = paymentsToUpdate.get(paymentKey) || payments.find(p => p.propertyId === property.id && p.year === year && p.month === month);
+                if (!payment) {
+                     payment = {
+                        id: '', // will be set by context
+                        propertyId: property.id,
+                        year,
+                        month,
+                        rentBillAmount: 0,
+                        rentPaidAmount: 0,
+                        utilities: []
+                    };
+                }
+
+                if (record.Type === 'Rent') {
+                    payment.rentBillAmount = record['Bill Amount'];
+                    payment.rentPaidAmount = record['Paid Amount'];
+                } else if (record.Type === 'Utility') {
+                    const utilityIndex = payment.utilities.findIndex(u => u.category === record.Category);
+                    if (utilityIndex > -1) {
+                        payment.utilities[utilityIndex] = { category: record.Category, billAmount: record['Bill Amount'], paidAmount: record['Paid Amount'] };
+                    } else {
+                        payment.utilities.push({ category: record.Category, billAmount: record['Bill Amount'], paidAmount: record['Paid Amount'] });
+                    }
+                }
+                paymentsToUpdate.set(paymentKey, { ...payment });
+            }
+        });
+        
+        paymentsToUpdate.forEach(payment => {
+            const existingPayment = payments.find(p => p.propertyId === payment.propertyId && p.year === payment.year && p.month === payment.month);
+            if (existingPayment) {
+                updatePayment({ ...existingPayment, ...payment });
+            } else {
+                addPayment(payment);
+            }
+        });
+        
+        alert(`${importPreview.validRecords.length} records imported successfully.`);
+        setIsImportModalOpen(false);
+        setImportPreview(null);
+    };
+
 
     const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
     return (
         <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Reporting</h2>
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">Reporting</h2>
+                <div className="flex gap-2">
+                     <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
+                        <ArrowUpTrayIcon className="w-4 h-4" />
+                        Import
+                    </button>
+                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".csv" className="hidden"/>
+                    <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700">
+                        <ArrowDownTrayIcon className="w-4 h-4" />
+                        Export
+                    </button>
+                </div>
+            </div>
             <Card>
                 <CardHeader><h3 className="font-semibold">Filters</h3></CardHeader>
                 <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -195,6 +380,30 @@ const ReportingScreen: React.FC = () => {
                     </div>
                 </CardContent>
             </Card>
+            
+            {importPreview && (
+                 <Modal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} title="Import Preview">
+                    <div className="space-y-4">
+                        <p>Found <strong>{importPreview.validRecords.length}</strong> valid records and <strong>{importPreview.errors.length}</strong> errors.</p>
+                        {importPreview.errors.length > 0 && (
+                             <div>
+                                <h4 className="font-semibold text-red-600">Errors:</h4>
+                                <ul className="text-sm text-red-500 list-disc list-inside max-h-40 overflow-y-auto bg-red-50 p-2 rounded">
+                                    {importPreview.errors.map(err => <li key={err.row}>Row {err.row}: {err.message}</li>)}
+                                </ul>
+                            </div>
+                        )}
+                         <p className="text-sm text-gray-600">Only valid records will be imported. Please review before continuing.</p>
+                         <div className="flex justify-end gap-2 pt-4">
+                            <button onClick={() => setIsImportModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
+                            <button onClick={handleConfirmImport} disabled={importPreview.validRecords.length === 0} className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400">
+                                Confirm Import
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
         </div>
     );
 };
