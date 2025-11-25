@@ -1,7 +1,10 @@
 
 import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
+import { auth } from '../firebaseConfig';
 
-type AuthStatus = 'idle' | 'guest' | 'authenticated';
+
+type AuthStatus = 'idle' | 'guest' | 'authenticated' | 'loading';
 
 export interface User {
   id: string;
@@ -19,70 +22,73 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// In a real app, this would be replaced with a real user object from Firebase Auth.
-const FAKE_PROD_USER: User = {
-    id: 'prod_user_xyz789', // A more distinct ID for the authenticated user
-    name: 'Prod User',
-    email: 'prod.user@example.com'
-};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  // FIX: Corrected the useState syntax. The previous syntax was invalid.
-  const [authStatus, setAuthStatus] = useState<AuthStatus>('idle');
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
 
   useEffect(() => {
-    // In a real app, you would use Firebase's `onAuthStateChanged` listener here
-    // to automatically manage user sessions across page reloads.
-    const storedStatus = sessionStorage.getItem('pmpr_authStatus') as AuthStatus;
-    if (storedStatus === 'authenticated') {
-        setUser(FAKE_PROD_USER);
-        setAuthStatus('authenticated');
-    } else if (storedStatus === 'guest') {
-        setAuthStatus('guest');
-    } else {
-        setAuthStatus('idle');
-    }
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        const { uid, displayName, email } = firebaseUser;
+        if (displayName && email) {
+            setUser({ id: uid, name: displayName, email });
+            setAuthStatus('authenticated');
+        } else {
+             // Handle cases where user info might be incomplete
+            console.error("Firebase user is missing display name or email.");
+            setUser(null);
+            setAuthStatus('idle');
+        }
+      } else {
+        // If no user is logged in via Firebase, check for a guest session.
+        const storedStatus = sessionStorage.getItem('pmpr_authStatus') as AuthStatus;
+        if (storedStatus === 'guest') {
+            setAuthStatus('guest');
+        } else {
+            setUser(null);
+            setAuthStatus('idle');
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const signInWithGoogle = () => {
-    // REAL IMPLEMENTATION:
-    // import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-    // const auth = getAuth();
-    // const provider = new GoogleAuthProvider();
-    // signInWithPopup(auth, provider).then((result) => {
-    //   const { uid, displayName, email } = result.user;
-    //   setUser({ id: uid, name: displayName, email });
-    //   setAuthStatus('authenticated');
-    //   sessionStorage.setItem('pmpr_authStatus', 'authenticated');
-    // }).catch((error) => console.error("Authentication failed:", error));
-
-    // SIMULATED IMPLEMENTATION:
-    setUser(FAKE_PROD_USER);
-    setAuthStatus('authenticated');
-    sessionStorage.setItem('pmpr_authStatus', 'authenticated');
+    const provider = new GoogleAuthProvider();
+    setAuthStatus('loading');
+    signInWithPopup(auth, provider)
+        .then((result) => {
+            const { uid, displayName, email } = result.user;
+            if (displayName && email) {
+                setUser({ id: uid, name: displayName, email });
+                setAuthStatus('authenticated');
+                sessionStorage.removeItem('pmpr_authStatus'); // Clean up guest status
+            }
+        })
+        .catch((error) => {
+            console.error("Authentication failed:", error);
+            setAuthStatus('idle');
+        });
   };
 
   const continueAsGuest = () => {
+    // Ensure any potential Firebase session is signed out before proceeding as guest.
+    if (auth.currentUser) {
+        signOut(auth);
+    }
     setUser(null);
     setAuthStatus('guest');
     sessionStorage.setItem('pmpr_authStatus', 'guest');
   };
 
   const logout = () => {
-    // REAL IMPLEMENTATION:
-    // import { getAuth } from "firebase/auth";
-    // const auth = getAuth();
-    // auth.signOut().then(() => {
-    //   setUser(null);
-    //   setAuthStatus('idle');
-    //   sessionStorage.removeItem('pmpr_authStatus');
-    // });
-    
-    // SIMULATED IMPLEMENTATION:
-    setUser(null);
-    setAuthStatus('idle');
-    sessionStorage.removeItem('pmpr_authStatus');
+    signOut(auth).then(() => {
+      setUser(null);
+      setAuthStatus('idle');
+      sessionStorage.removeItem('pmpr_authStatus');
+    });
   };
   
   const value = useMemo(() => ({
@@ -93,7 +99,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logout
   }), [user, authStatus]);
 
-  // FIX: Corrected the closing tag for AuthContext.Provider.
+  // Render a loading state while checking auth status.
+  if (authStatus === 'loading') {
+      return (
+          <div className="min-h-screen flex items-center justify-center">
+              <p>Loading...</p>
+          </div>
+      )
+  }
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
