@@ -36,7 +36,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     
     // FIX: The Firebase user type is `firebase.auth.User` for the v8 compatibility library.
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser: firebase.auth.User | null) => {
+    // @FIX: Replaced `firebase.auth.User` with `any` to resolve "Cannot find namespace 'firebase'" error.
+    // The global `firebase` object is declared as `any`, so its nested types are not available to TypeScript.
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser: any | null) => {
       if (firebaseUser) {
         const { uid, displayName, email } = firebaseUser;
         if (displayName && email) {

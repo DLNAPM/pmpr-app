@@ -1,4 +1,3 @@
-
 // Declare the global firebase object that is loaded from the script tags in index.html
 declare const firebase: any;
 
@@ -16,15 +15,27 @@ const firebaseConfig = {
   appId: process.env.FIREBASE_APP_ID || "1:12345:web:abcdef123"
 };
 
-export const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
+const hasApiKeys = firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
+const isFirebaseLoaded = typeof firebase !== 'undefined' && firebase.app;
 
-// Initialize Firebase only if it is configured and hasn't been initialized yet.
-if (isFirebaseConfigured) {
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
+// The feature is configured ONLY if the keys are provided AND the library has loaded.
+export const isFirebaseConfigured = hasApiKeys && isFirebaseLoaded;
+
+let authService = null;
+
+if (isFirebaseLoaded) {
+    if (hasApiKeys) {
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        authService = firebase.auth();
     }
-} else {
-    console.warn(
+}
+
+if (hasApiKeys && !isFirebaseLoaded) {
+    console.error("Firebase environment variables are set, but the Firebase library failed to load. Please check your network connection and the script tags in index.html.");
+} else if (!hasApiKeys) {
+     console.warn(
         `%cFIREBASE WARNING: Your Firebase environment variables are not configured.
         %cThe application will load, but Google Sign-In will be disabled.
         Please ensure you have set all FIREBASE_... variables in your environment.`,
@@ -33,5 +44,5 @@ if (isFirebaseConfigured) {
     );
 }
 
-// Export the auth service only if Firebase is properly configured.
-export const auth = isFirebaseConfigured ? firebase.auth() : null;
+// Export the auth service. It will be null if not configured/loaded.
+export const auth = authService;
