@@ -1,3 +1,4 @@
+
 // Declare the global firebase object that is loaded from the script tags in index.html
 declare const firebase: any;
 
@@ -6,34 +7,33 @@ declare const firebase: any;
 // You MUST set these in your deployment environment for authentication to work.
 // Example: FIREBASE_API_KEY=your_api_key
 
+const API_KEY = process.env.FIREBASE_API_KEY || "YOUR_API_KEY_HERE";
+
 const firebaseConfig = {
-  // FIX: Provide a fallback for the API key to prevent crashes if the env var is not set.
-  apiKey: "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo",
-  authDomain: "pmpr-app.firebaseapp.com",
-  projectId: "pmpr-app",
-  storageBucket: "pmpr-app.firebasestorage.app",
-  messagingSenderId: "608205035568",
-  appId: "1:608205035568:web:5aa7530b75be8301bbf5f5"
+  apiKey: API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN || "your-project.firebaseapp.com",
+  projectId: process.env.FIREBASE_PROJECT_ID || "your-project",
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "your-project.appspot.com",
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: process.env.FIREBASE_APP_ID || ""
 };
 
+export const isFirebaseConfigured = API_KEY !== "YOUR_API_KEY_HERE";
 
-// If the API key is the placeholder, it means the environment variables are not set.
-// Log a clear, prominent warning to the developer console.
-if (firebaseConfig.apiKey === "MISSING_API_KEY") {
+// Initialize Firebase only if it is configured and hasn't been initialized yet.
+if (isFirebaseConfigured) {
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+} else {
     console.warn(
         `%cFIREBASE WARNING: Your Firebase environment variables are not configured.
-        %cThe application will load, but authentication will fail.
+        %cThe application will load, but Google Sign-In will be disabled.
         Please ensure you have set all FIREBASE_... variables in your environment.`,
         "color: orange; font-weight: bold; font-size: 14px;",
         "color: orange; font-size: 12px;"
     );
 }
 
-// Initialize Firebase, but only if it hasn't been initialized yet.
-// This prevents errors during hot-reloading in development.
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-
-// Initialize Firebase Authentication and get a reference to the service
-export const auth = firebase.auth();
+// Export the auth service only if Firebase is properly configured.
+export const auth = isFirebaseConfigured ? firebase.auth() : null;

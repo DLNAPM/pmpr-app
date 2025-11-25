@@ -1,5 +1,6 @@
+
 import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
-import { auth } from '../firebaseConfig';
+import { auth, isFirebaseConfigured } from '../firebaseConfig';
 
 // Declare the global firebase object provided by the scripts in index.html
 declare const firebase: any;
@@ -15,6 +16,7 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   authStatus: AuthStatus;
+  isGoogleSignInConfigured: boolean;
   signInWithGoogle: () => void;
   continueAsGuest: () => void;
   logout: () => void;
@@ -28,21 +30,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
 
   useEffect(() => {
-    // FIX: The firebase.User type is incorrect for the compat library setup. It should be firebase.auth.User.
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser: firebase.auth.User | null) => {
+    if (!isFirebaseConfigured || !auth) {
+        const storedStatus = sessionStorage.getItem('pmpr_authStatus') as AuthStatus;
+        setAuthStatus(storedStatus === 'guest' ? 'guest' : 'idle');
+        return;
+    }
+    
+    // FIX: Corrected the Firebase user type from `firebase.auth.User` to `firebase.User` which is the correct type for the v8 compatibility library.
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser: firebase.User | null) => {
       if (firebaseUser) {
         const { uid, displayName, email } = firebaseUser;
         if (displayName && email) {
             setUser({ id: uid, name: displayName, email });
             setAuthStatus('authenticated');
         } else {
-             // Handle cases where user info might be incomplete
             console.error("Firebase user is missing display name or email.");
             setUser(null);
             setAuthStatus('idle');
         }
       } else {
-        // If no user is logged in via Firebase, check for a guest session.
         const storedStatus = sessionStorage.getItem('pmpr_authStatus') as AuthStatus;
         if (storedStatus === 'guest') {
             setAuthStatus('guest');
@@ -57,6 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = () => {
+    if (!isFirebaseConfigured || !auth) {
+        console.error("Firebase is not configured. Cannot sign in with Google.");
+        return;
+    }
+
     const provider = new firebase.auth.GoogleAuthProvider();
     setAuthStatus('loading');
     auth.signInWithPopup(provider)
@@ -66,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (displayName && email) {
                   setUser({ id: uid, name: displayName, email });
                   setAuthStatus('authenticated');
-                  sessionStorage.removeItem('pmpr_authStatus'); // Clean up guest status
+                  sessionStorage.removeItem('pmpr_authStatus');
               }
             }
         })
@@ -77,8 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const continueAsGuest = () => {
-    // Ensure any potential Firebase session is signed out before proceeding as guest.
-    if (auth.currentUser) {
+    if (isFirebaseConfigured && auth && auth.currentUser) {
         auth.signOut();
     }
     setUser(null);
@@ -87,22 +97,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    auth.signOut().then(() => {
+    if (isFirebaseConfigured && auth) {
+      auth.signOut().then(() => {
+        setUser(null);
+        setAuthStatus('idle');
+        sessionStorage.removeItem('pmpr_authStatus');
+      });
+    } else {
+      // Handle guest logout
       setUser(null);
       setAuthStatus('idle');
       sessionStorage.removeItem('pmpr_authStatus');
-    });
+    }
   };
   
   const value = useMemo(() => ({
     user,
     authStatus,
+    // FIX: Provided a value for `isGoogleSignInConfigured` in the context. It should be initialized with `isFirebaseConfigured`.
+    isGoogleSignInConfigured: isFirebaseConfigured,
     signInWithGoogle,
     continueAsGuest,
     logout
   }), [user, authStatus]);
 
-  // Render a loading state while checking auth status.
   if (authStatus === 'loading') {
       return (
           <div className="min-h-screen flex items-center justify-center">

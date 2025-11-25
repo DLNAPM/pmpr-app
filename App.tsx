@@ -6,18 +6,20 @@ import PropertiesScreen from './screens/PropertiesScreen';
 import PaymentsScreen from './screens/PaymentsScreen';
 import RepairsScreen from './screens/RepairsScreen';
 import ReportingScreen from './screens/ReportingScreen';
-import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon } from './components/Icons';
+import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
+import HelpModal from './components/HelpModal';
 
 type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'reporting';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [action, setAction] = useState<string | null>(null);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const { authStatus, user, logout } = useAuth();
 
-  if (authStatus === 'idle') {
+  if (authStatus === 'idle' || authStatus === 'loading') {
     return <LoginScreen />;
   }
 
@@ -76,6 +78,9 @@ const App: React.FC = () => {
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-blue-800 tracking-tight">PMPR App</h1>
             <div className="flex items-center gap-4">
+               <button onClick={() => setIsHelpModalOpen(true)} className="text-gray-500 hover:text-blue-600 transition-colors" aria-label="Help">
+                   <QuestionMarkCircleIcon className="w-6 h-6" />
+               </button>
                <div className="text-right">
                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
                     <UserCircleIcon className="w-6 h-6 text-gray-400" />
@@ -117,6 +122,7 @@ const App: React.FC = () => {
         <NavItem tabName="repairs" label="Repairs" icon={<WrenchScrewdriverIcon className="w-6 h-6" />} />
         <NavItem tabName="reporting" label="Reporting" icon={<DocumentChartBarIcon className="w-6 h-6" />} />
       </nav>
+      <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
     </div>
   );
 };
