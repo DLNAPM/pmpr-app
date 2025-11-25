@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import ProgressBar from '../components/ProgressBar';
 import { useAppContext } from '../contexts/AppContext';
-import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon } from '../components/Icons';
+import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon } from '../components/Icons';
 
 interface DashboardScreenProps {
   onAction: (tab: 'properties' | 'payments' | 'repairs', action?: string) => void;
@@ -161,7 +161,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
                                         <li key={prop.id} className="flex items-center justify-between">
                                             <div>
                                                 <p className="font-medium">{index + 1}. {prop.name}</p>
-                                                <p className="text-xs text-gray-500">{prop.address}</p>
+                                                <a
+                                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(prop.address)}`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="group inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                                                >
+                                                  <MapPinIcon className="w-3 h-3 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                                                  <span>{prop.address}</span>
+                                                </a>
                                             </div>
                                             <span className={`font-bold text-lg ${getHealthColor(score)}`}>{score.toFixed(0)}</span>
                                         </li>
