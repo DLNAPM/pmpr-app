@@ -12,24 +12,32 @@ type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [action, setAction] = useState<string | null>(null);
   const { authStatus, user, logout } = useAuth();
 
   if (authStatus === 'idle') {
     return <LoginScreen />;
   }
 
+  const handleAction = (tab: Tab, actionName: string = 'add') => {
+    setActiveTab(tab);
+    setAction(actionName);
+  };
+
+  const onActionDone = () => setAction(null);
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardScreen />;
+        return <DashboardScreen onAction={handleAction} />;
       case 'properties':
-        return <PropertiesScreen />;
+        return <PropertiesScreen action={action} onActionDone={onActionDone} />;
       case 'payments':
-        return <PaymentsScreen />;
+        return <PaymentsScreen action={action} onActionDone={onActionDone} />;
       case 'repairs':
-        return <RepairsScreen />;
+        return <RepairsScreen action={action} onActionDone={onActionDone} />;
       default:
-        return <DashboardScreen />;
+        return <DashboardScreen onAction={handleAction} />;
     }
   };
 

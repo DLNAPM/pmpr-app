@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant } from '../types';
-import { BuildingOfficeIcon, PlusIcon, UserIcon } from '../components/Icons';
+import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { UTILITY_CATEGORIES } from '../constants';
 
@@ -89,11 +89,33 @@ const PropertyForm: React.FC<{property?: Property; onSave: (property: Omit<Prope
     );
 };
 
+interface PropertiesScreenProps {
+  action: string | null;
+  onActionDone: () => void;
+}
 
-const PropertiesScreen: React.FC = () => {
+const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDone }) => {
     const { properties, addProperty, updateProperty } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState<Property | undefined>(undefined);
+
+    const openAddModal = useCallback(() => {
+        setSelectedProperty(undefined);
+        setIsModalOpen(true);
+    }, []);
+
+    const openEditModal = (property: Property) => {
+        setSelectedProperty(property);
+        setIsModalOpen(true);
+    };
+
+    useEffect(() => {
+        if (action === 'add') {
+          openAddModal();
+          onActionDone();
+        }
+    }, [action, onActionDone, openAddModal]);
+
 
     const handleSave = (propertyData: Omit<Property, 'id'> | Property) => {
         if ('id' in propertyData) {
@@ -103,16 +125,6 @@ const PropertiesScreen: React.FC = () => {
         }
         setIsModalOpen(false);
         setSelectedProperty(undefined);
-    };
-
-    const openAddModal = () => {
-        setSelectedProperty(undefined);
-        setIsModalOpen(true);
-    };
-
-    const openEditModal = (property: Property) => {
-        setSelectedProperty(property);
-        setIsModalOpen(true);
     };
 
     return (
@@ -127,9 +139,18 @@ const PropertiesScreen: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {properties.map(prop => (
                     <Card key={prop.id} onClick={() => openEditModal(prop)}>
-                        <CardHeader>
-                            <h3 className="font-bold text-lg text-blue-800">{prop.name}</h3>
-                            <p className="text-sm text-gray-500">{prop.address}</p>
+                        <CardHeader className="flex justify-between items-start">
+                            <div>
+                                <h3 className="font-bold text-lg text-blue-800">{prop.name}</h3>
+                                <p className="text-sm text-gray-500">{prop.address}</p>
+                            </div>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); openEditModal(prop); }} 
+                                className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors"
+                                aria-label="Edit Property"
+                            >
+                                <PencilSquareIcon className="w-5 h-5"/>
+                            </button>
                         </CardHeader>
                         <CardContent>
                             {prop.tenants.map(tenant => (

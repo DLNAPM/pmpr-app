@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Payment, Property, UtilityPayment } from '../types';
@@ -69,10 +69,30 @@ const PaymentForm: React.FC<{property: Property; onSave: (payment: Omit<Payment,
     );
 };
 
-const PaymentsScreen: React.FC = () => {
+interface PaymentsScreenProps {
+  action: string | null;
+  onActionDone: () => void;
+}
+
+const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone }) => {
     const { properties, payments, getPaymentsForProperty, addPayment, updatePayment } = useAppContext();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    
+    const openModal = useCallback(() => {
+        if (properties.length > 0) {
+            setIsModalOpen(true);
+        } else {
+            alert("You must add a property before you can record a payment.");
+        }
+    }, [properties.length]);
+
+    useEffect(() => {
+        if (action === 'add') {
+          openModal();
+          onActionDone();
+        }
+    }, [action, onActionDone, openModal]);
     
     const selectedProperty = useMemo(() => properties.find(p => p.id === selectedPropertyId), [properties, selectedPropertyId]);
     const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a,b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
@@ -93,11 +113,12 @@ const PaymentsScreen: React.FC = () => {
                 <h2 className="text-2xl font-bold">Payments</h2>
                 <div className="flex items-center gap-4">
                     <select value={selectedPropertyId || ''} onChange={(e) => setSelectedPropertyId(e.target.value)} className="p-2 border rounded-lg bg-white shadow-sm w-full sm:w-64">
+                         {properties.length === 0 && <option>No properties available</option>}
                         {properties.map(prop => (
                             <option key={prop.id} value={prop.id}>{prop.name}</option>
                         ))}
                     </select>
-                    <button onClick={() => setIsModalOpen(true)} disabled={!selectedProperty} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                    <button onClick={openModal} disabled={!selectedProperty} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                         <PlusIcon className="w-5 h-5" />
                         Record
                     </button>
@@ -127,6 +148,7 @@ const PaymentsScreen: React.FC = () => {
                                             </span>
                                         </div>
                                     ))}
+                                     {payment.utilities.length === 0 && <p className="text-xs text-gray-500">No utilities tracked for this property.</p>}
                                 </div>
                             </CardContent>
                         </Card>

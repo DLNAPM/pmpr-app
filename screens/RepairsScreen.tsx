@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Repair, RepairStatus } from '../types';
@@ -64,10 +64,31 @@ const RepairForm: React.FC<{
     );
 };
 
-const RepairsScreen: React.FC = () => {
+interface RepairsScreenProps {
+  action: string | null;
+  onActionDone: () => void;
+}
+
+const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, onActionDone }) => {
     const { properties, repairs, addRepair, updateRepair, getPropertyById } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined);
+
+    const openAddModal = useCallback(() => {
+        if (properties.length === 0) {
+            alert("You must add a property before logging a repair.");
+            return;
+        }
+        setSelectedRepair(undefined);
+        setIsModalOpen(true);
+    }, [properties.length]);
+
+     useEffect(() => {
+        if (action === 'add') {
+          openAddModal();
+          onActionDone();
+        }
+    }, [action, onActionDone, openAddModal]);
 
     const handleSave = (repairData: Omit<Repair, 'id'> | Repair) => {
         if ('id' in repairData) {
@@ -77,11 +98,6 @@ const RepairsScreen: React.FC = () => {
         }
         setIsModalOpen(false);
         setSelectedRepair(undefined);
-    };
-
-    const openAddModal = () => {
-        setSelectedRepair(undefined);
-        setIsModalOpen(true);
     };
 
     const openEditModal = (repair: Repair) => {

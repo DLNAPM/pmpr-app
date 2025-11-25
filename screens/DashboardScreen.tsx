@@ -3,8 +3,13 @@ import React, { useMemo } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import ProgressBar from '../components/ProgressBar';
 import { useAppContext } from '../contexts/AppContext';
+import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon } from '../components/Icons';
 
-const DashboardScreen: React.FC = () => {
+interface DashboardScreenProps {
+  onAction: (tab: 'properties' | 'payments' | 'repairs', action?: string) => void;
+}
+
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
     const { properties, payments, getSiteHealthScore } = useAppContext();
 
     const summary = useMemo(() => {
@@ -58,10 +63,48 @@ const DashboardScreen: React.FC = () => {
         return 'text-red-600';
     };
 
+    const handleRecordPaymentClick = () => {
+        if (properties.length === 0) {
+          alert("Please add a property before recording a payment.");
+          onAction('properties', 'add');
+        } else {
+          onAction('payments', 'add');
+        }
+    };
+    
+    const handleLogRepairClick = () => {
+        if (properties.length === 0) {
+          alert("Please add a property before logging a repair.");
+          onAction('properties', 'add');
+        } else {
+          onAction('repairs', 'add');
+        }
+    };
+
+
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Main Column */}
             <div className="md:col-span-2 space-y-6">
+                 {/* Quick Actions */}
+                <Card>
+                    <CardHeader><h3 className="font-semibold text-lg">Quick Actions</h3></CardHeader>
+                    <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <button onClick={() => onAction('properties', 'add')} className="flex flex-col items-center justify-center p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
+                            <BuildingOfficeIcon className="w-8 h-8 text-blue-600 mb-2"/>
+                            <span className="font-semibold text-blue-800">Add Property</span>
+                        </button>
+                        <button onClick={handleRecordPaymentClick} className="flex flex-col items-center justify-center p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
+                            <CreditCardIcon className="w-8 h-8 text-green-600 mb-2"/>
+                            <span className="font-semibold text-green-800">Record Payment</span>
+                        </button>
+                        <button onClick={handleLogRepairClick} className="flex flex-col items-center justify-center p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors">
+                            <WrenchScrewdriverIcon className="w-8 h-8 text-yellow-600 mb-2"/>
+                            <span className="font-semibold text-yellow-800">Log Repair</span>
+                        </button>
+                    </CardContent>
+                </Card>
+
                 {/* Summary Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <Card><CardContent><p className="text-sm text-gray-500">Total Collected</p><p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalCollected)}</p></CardContent></Card>
@@ -93,6 +136,7 @@ const DashboardScreen: React.FC = () => {
                                 <ProgressBar value={data.total > 0 ? (data.paid / data.total) * 100 : 0} />
                             </div>
                         ))}
+                         {Object.keys(summary.categoryBreakdown).length === 0 && <p className="text-gray-500 text-center py-4">No payments recorded for the current month.</p>}
                     </CardContent>
                 </Card>
             </div>
@@ -109,20 +153,24 @@ const DashboardScreen: React.FC = () => {
                 <Card>
                     <CardHeader><h3 className="font-semibold text-lg">Site Health & Ranking</h3></CardHeader>
                     <CardContent>
-                        <ul className="space-y-3">
-                            {sortedProperties.map((prop, index) => {
-                                const score = getSiteHealthScore(prop.id);
-                                return (
-                                    <li key={prop.id} className="flex items-center justify-between">
-                                        <div>
-                                            <p className="font-medium">{index + 1}. {prop.name}</p>
-                                            <p className="text-xs text-gray-500">{prop.address}</p>
-                                        </div>
-                                        <span className={`font-bold text-lg ${getHealthColor(score)}`}>{score.toFixed(0)}</span>
-                                    </li>
-                                );
-                            })}
-                        </ul>
+                        {properties.length > 0 ? (
+                            <ul className="space-y-3">
+                                {sortedProperties.map((prop, index) => {
+                                    const score = getSiteHealthScore(prop.id);
+                                    return (
+                                        <li key={prop.id} className="flex items-center justify-between">
+                                            <div>
+                                                <p className="font-medium">{index + 1}. {prop.name}</p>
+                                                <p className="text-xs text-gray-500">{prop.address}</p>
+                                            </div>
+                                            <span className={`font-bold text-lg ${getHealthColor(score)}`}>{score.toFixed(0)}</span>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        ) : (
+                            <p className="text-gray-500 text-center py-4">No properties to rank.</p>
+                        )}
                     </CardContent>
                 </Card>
             </div>
