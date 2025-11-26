@@ -121,6 +121,9 @@ const App: React.FC = () => {
         
         <main className="flex-1 min-w-0 py-8 pb-24 md:pb-8">
           {renderContent()}
+          <footer className="text-center pt-8 text-xs text-gray-500">
+            © 2025 C&SH Group Properties, LLC. Created for free using Google AIStudio and Render.com
+          </footer>
         </main>
       </div>
 
