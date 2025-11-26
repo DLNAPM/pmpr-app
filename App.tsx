@@ -81,7 +81,7 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-gray-800">
+    <div className="min-h-screen bg-slate-100 font-sans text-gray-800 flex flex-col">
       <header className="bg-white shadow-md sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex justify-between items-center">
@@ -107,7 +107,7 @@ const App: React.FC = () => {
         </div>
       </header>
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-grow w-full">
         <aside className="hidden md:block w-56 flex-shrink-0 py-8 pr-8">
             <nav className="space-y-1">
                 <SideNavItem tabName="dashboard" label="Dashboard" icon={<ChartPieIcon />} />
@@ -121,12 +121,12 @@ const App: React.FC = () => {
         
         <main className="flex-1 min-w-0 py-8 pb-24 md:pb-8">
           {renderContent()}
-          <footer className="text-center pt-8 text-xs text-gray-500">
-            © 2025 C&SH Group Properties, LLC. Created for free using Google AIStudio and Render.com
-          </footer>
         </main>
       </div>
-
+      
+      <footer className="w-full text-center text-xs text-gray-500 py-4 pb-20 md:py-4">
+        © 2025 C&SH Group Properties, LLC. Created for free using Google AIStudio and Render.com
+      </footer>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg flex justify-around md:hidden">
         <NavItem tabName="dashboard" label="Dashboard" icon={<ChartPieIcon className="w-6 h-6" />} />
