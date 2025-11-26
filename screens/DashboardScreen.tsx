@@ -26,7 +26,36 @@ const getFakeRedfinValue = (propertyId: string) => {
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
     const { properties, payments, repairs, getSiteHealthScore } = useAppContext();
 
-    const summary = useMemo(() => {
+    // New summary for ALL-TIME financial data
+    const overallSummary = useMemo(() => {
+        const paymentTotals = payments.reduce((acc, p) => {
+            acc.billed += p.rentBillAmount;
+            acc.collected += p.rentPaidAmount;
+            p.utilities.forEach(u => {
+                acc.billed += u.billAmount;
+                acc.collected += u.paidAmount;
+            });
+            return acc;
+        }, { collected: 0, billed: 0 });
+
+        const repairTotals = repairs.reduce((acc, r) => {
+            acc.billed += r.cost; // All repairs are a bill
+            if (r.status === RepairStatus.COMPLETE) {
+                acc.collected += r.cost; // Only completed repairs are considered paid
+            }
+            return acc;
+        }, { collected: 0, billed: 0 });
+        
+        const totalCollected = paymentTotals.collected + repairTotals.collected;
+        const totalBilled = paymentTotals.billed + repairTotals.billed;
+        const totalOutstanding = totalBilled - totalCollected;
+
+        return { totalCollected, totalBilled, totalOutstanding };
+    }, [payments, repairs]);
+
+
+    // Summary for THIS MONTH's payment data
+    const monthlySummary = useMemo(() => {
         let totalCollected = 0;
         let totalBilled = 0;
         let categoryBreakdown: { [key: string]: { paid: number, total: number } } = {};
@@ -53,10 +82,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
             });
         });
 
-        const totalOutstanding = totalBilled - totalCollected;
         const overallCollectionRate = totalBilled > 0 ? (totalCollected / totalBilled) * 100 : 100;
 
-        return { totalCollected, totalOutstanding, totalDue: totalBilled, overallCollectionRate, categoryBreakdown };
+        return { overallCollectionRate, categoryBreakdown };
     }, [payments]);
 
     const repairSummary = useMemo(() => {
@@ -119,30 +147,29 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
                     </CardContent>
                 </Card>
 
-                {/* Summary Cards */}
+                {/* Summary Cards (All-Time) */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <Card><CardContent><p className="text-sm text-gray-500">Total Collected</p><p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalCollected)}</p></CardContent></Card>
-                    <Card><CardContent><p className="text-sm text-gray-500">Outstanding</p><p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalOutstanding)}</p></CardContent></Card>
-                    <Card><CardContent><p className="text-sm text-gray-500">Total Billed</p><p className="text-2xl font-bold text-blue-800">{formatCurrency(summary.totalDue)}</p></CardContent></Card>
+                    <Card><CardContent><p className="text-sm text-gray-500">Total Collected</p><p className="text-2xl font-bold text-green-600">{formatCurrency(overallSummary.totalCollected)}</p></CardContent></Card>
+                    <Card><CardContent><p className="text-sm text-gray-500">Outstanding</p><p className="text-2xl font-bold text-red-600">{formatCurrency(overallSummary.totalOutstanding)}</p></CardContent></Card>
+                    <Card><CardContent><p className="text-sm text-gray-500">Total Billed</p><p className="text-2xl font-bold text-blue-800">{formatCurrency(overallSummary.totalBilled)}</p></CardContent></Card>
                 </div>
 
-                {/* Overall Collection */}
+                {/* Overall Collection (This Month) */}
                 <Card>
                     <CardHeader><h3 className="font-semibold text-lg">Overall Collection Rate (This Month)</h3></CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-4">
-                            <span className="text-3xl font-bold text-blue-700">{summary.overallCollectionRate.toFixed(1)}%</span>
-                            <ProgressBar value={summary.overallCollectionRate} />
+                            <span className="text-3xl font-bold text-blue-700">{monthlySummary.overallCollectionRate.toFixed(1)}%</span>
+                            <ProgressBar value={monthlySummary.overallCollectionRate} />
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* Payment Breakdown */}
+                {/* Payment Breakdown (This Month) */}
                 <Card>
                     <CardHeader><h3 className="font-semibold text-lg">Payment Breakdown (This Month)</h3></CardHeader>
                     <CardContent className="space-y-4">
-                        {/* Fix: Explicitly type 'data' to resolve properties 'paid' and 'total' not being found on type 'unknown'. */}
-                        {Object.entries(summary.categoryBreakdown).map(([category, data]) => {
+                        {Object.entries(monthlySummary.categoryBreakdown).map(([category, data]) => {
                             const typedData = data as { paid: number, total: number };
                             return (
                                 <div key={category}>
@@ -154,7 +181,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
                                 </div>
                             );
                         })}
-                         {Object.keys(summary.categoryBreakdown).length === 0 && <p className="text-gray-500 text-center py-4">No payments recorded for the current month.</p>}
+                         {Object.keys(monthlySummary.categoryBreakdown).length === 0 && <p className="text-gray-500 text-center py-4">No payments recorded for the current month.</p>}
                     </CardContent>
                 </Card>
             </div>
