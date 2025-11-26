@@ -201,14 +201,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
                         <div className="pt-4">
                             <p className="text-sm text-gray-500">Repairs Overview</p>
                             <div className="flex justify-between items-baseline mt-1">
-                                <div>
+                                <button onClick={() => onNavigateToReport({ repairStatus: 'open' })} className="text-left hover:bg-slate-100 p-2 rounded-lg">
                                     <p className="text-2xl font-bold text-yellow-600">{repairSummary.openRequests}</p>
                                     <p className="text-xs text-gray-500">Open Requests</p>
-                                </div>
-                                <div>
+                                </button>
+                                <button onClick={() => onNavigateToReport({ repairStatus: 'completed' })} className="text-right hover:bg-slate-100 p-2 rounded-lg">
                                     <p className="text-2xl font-bold text-slate-700">{formatCurrency(repairSummary.totalCost)}</p>
                                     <p className="text-xs text-gray-500">Completed Cost</p>
-                                </div>
+                                </button>
                             </div>
                         </div>
                     </CardContent>

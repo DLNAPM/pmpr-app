@@ -16,6 +16,7 @@ interface ReportItem {
     billAmount: number;
     paidAmount: number;
     balance: number;
+    repairStatus?: RepairStatus;
 }
 
 interface CsvRow {
@@ -48,6 +49,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         startDate: '',
         endDate: '',
         status: 'all' as 'all' | 'collected' | 'outstanding',
+        repairStatus: 'all' as 'all' | 'open' | 'completed',
     });
     
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -56,7 +58,13 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
     useEffect(() => {
         if (initialFilter) {
-            setFilters(prev => ({ ...prev, status: initialFilter.status }));
+            setFilters(prev => ({ 
+                ...prev, 
+                status: initialFilter.status || 'all',
+                repairStatus: initialFilter.repairStatus || 'all',
+                // If a repair filter is passed, focus the report on repairs
+                type: initialFilter.repairStatus ? 'repair' : prev.type,
+            }));
             onFilterApplied();
         }
     }, [initialFilter, onFilterApplied]);
@@ -120,6 +128,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                 billAmount: r.cost,
                 paidAmount: r.status === 'Complete' ? r.cost : 0,
                 balance: r.status === 'Complete' ? 0 : r.cost,
+                repairStatus: r.status,
             });
         });
 
@@ -142,6 +151,14 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
             if (filters.status === 'outstanding' && item.balance <= 0) return false;
             if (filters.status === 'collected' && item.paidAmount <= 0) return false;
+
+            if (item.type === 'Repair') {
+                if (filters.repairStatus === 'open' && item.repairStatus === RepairStatus.COMPLETE) return false;
+                if (filters.repairStatus === 'completed' && item.repairStatus !== RepairStatus.COMPLETE) return false;
+            } else if (filters.repairStatus !== 'all') { // If repair status filter is active, hide non-repair items
+                return false;
+            }
+
 
             return true;
         }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -331,11 +348,16 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
             </div>
             <Card>
                 <CardHeader><h3 className="font-semibold">Filters</h3></CardHeader>
-                <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
                      <select name="status" value={filters.status} onChange={handleFilterChange} className="w-full p-2 border rounded">
                         <option value="all">All Statuses</option>
                         <option value="collected">Collected</option>
                         <option value="outstanding">Outstanding</option>
+                    </select>
+                     <select name="repairStatus" value={filters.repairStatus} onChange={handleFilterChange} className="w-full p-2 border rounded">
+                        <option value="all">All Repair Statuses</option>
+                        <option value="open">Open</option>
+                        <option value="completed">Completed</option>
                     </select>
                     <select name="type" value={filters.type} onChange={handleFilterChange} className="w-full p-2 border rounded">
                         <option value="all">All Types</option>

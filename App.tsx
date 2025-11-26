@@ -12,7 +12,11 @@ import LoginScreen from './screens/LoginScreen';
 import HelpModal from './components/HelpModal';
 
 type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting';
-export type ReportFilter = { status: 'all' | 'collected' | 'outstanding' };
+export type ReportFilter = { 
+  status?: 'all' | 'collected' | 'outstanding';
+  repairStatus?: 'all' | 'open' | 'completed';
+};
+
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
