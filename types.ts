@@ -1,4 +1,3 @@
-
 export enum RepairStatus {
   PENDING_REPAIRMEN = 'Pending Repairmen',
   PENDING_SUPPLY = 'Pending Supply',
@@ -28,6 +27,7 @@ export interface Payment {
   rentPaidAmount: number;
   utilities: UtilityPayment[];
   paymentDate?: string; // ISO string for when the last payment part was made
+  userId?: string;
 }
 
 export interface Contractor {
@@ -38,6 +38,7 @@ export interface Contractor {
   companyAddress?: string;
   email?: string;
   comments?: string;
+  userId?: string;
 }
 
 export interface Repair {
@@ -51,6 +52,7 @@ export interface Repair {
   requestDate: string; // ISO string
   repairDate?: string; // ISO string for when the repair was done
   completionDate?: string; // ISO string for when status became 'Complete'
+  userId?: string;
 }
 
 export interface Property {
@@ -63,4 +65,5 @@ export interface Property {
   securityDeposit: number;
   rentAmount: number; // This is the standard monthly rent bill amount
   utilitiesToTrack: string[];
+  userId?: string;
 }

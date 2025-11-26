@@ -1,8 +1,8 @@
-
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus, Contractor } from '../types';
 import { useAuth, User } from './AuthContext';
+import { db, isFirebaseConfigured } from '../firebaseConfig';
 
 // This is the initial data for a new GUEST user.
 const initialGuestData = {
@@ -100,36 +100,64 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
 
-// This provider handles data for AUTHENTICATED users
+// This provider handles data for AUTHENTICATED users using FIREBASE FIRESTORE
 const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNode }> = ({ user, children }) => {
-    const propertiesKey = `pmpr_user_${user.id}_properties`;
-    const paymentsKey = `pmpr_user_${user.id}_payments`;
-    const repairsKey = `pmpr_user_${user.id}_repairs`;
-    const contractorsKey = `pmpr_user_${user.id}_contractors`;
+    const [properties, setProperties] = useState<Property[]>([]);
+    const [payments, setPayments] = useState<Payment[]>([]);
+    const [repairs, setRepairs] = useState<Repair[]>([]);
+    const [contractors, setContractors] = useState<Contractor[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const [properties, setProperties] = useLocalStorage<Property[]>(propertiesKey, []);
-    const [payments, setPayments] = useLocalStorage<Payment[]>(paymentsKey, []);
-    const [repairs, setRepairs] = useLocalStorage<Repair[]>(repairsKey, []);
-    const [contractors, setContractors] = useLocalStorage<Contractor[]>(contractorsKey, []);
+    useEffect(() => {
+        if (!isFirebaseConfigured || !db) {
+            console.error("Firestore is not configured. Data cannot be loaded.");
+            setIsLoading(false);
+            return;
+        }
+
+        const collections = ['properties', 'payments', 'repairs', 'contractors'];
+        const setters = [setProperties, setPayments, setRepairs, setContractors];
+        const unsubscribes = collections.map((collectionName, index) => {
+            return db.collection(collectionName)
+                .where('userId', '==', user.id)
+                .onSnapshot((snapshot: any) => {
+                    const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                    setters[index](data as any); // Using 'any' due to varied types
+                    setIsLoading(false); // Set loading to false after first data load
+                }, (error: any) => {
+                    console.error(`Error fetching ${collectionName}: `, error);
+                    setIsLoading(false);
+                });
+        });
+
+        // Cleanup function to detach listeners
+        return () => unsubscribes.forEach(unsub => unsub());
+
+    }, [user.id]);
     
-    const addProperty = (property: Omit<Property, 'id'>) => setProperties(p => [...p, { ...property, id: crypto.randomUUID() }]);
-    const updateProperty = (updated: Property) => setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
-    const addPayment = (payment: Omit<Payment, 'id'>) => setPayments(p => [...p, { ...payment, id: crypto.randomUUID() }]);
-    const updatePayment = (updated: Payment) => setPayments(p => p.map(pay => pay.id === updated.id ? updated : pay));
-    const addRepair = (repair: Omit<Repair, 'id'>) => setRepairs(r => [...r, { ...repair, id: crypto.randomUUID() }]);
-    const updateRepair = (updated: Repair) => setRepairs(r => r.map(rep => rep.id === updated.id ? updated : rep));
+    const addProperty = (property: Omit<Property, 'id'>) => { db.collection('properties').add({ ...property, userId: user.id }); };
+    const updateProperty = (updated: Property) => { const { id, ...data } = updated; db.collection('properties').doc(id).set(data, { merge: true }); };
+    
+    const addPayment = (payment: Omit<Payment, 'id'>) => { db.collection('payments').add({ ...payment, userId: user.id }); };
+    const updatePayment = (updated: Payment) => { const { id, ...data } = updated; db.collection('payments').doc(id).set(data, { merge: true }); };
+
+    const addRepair = (repair: Omit<Repair, 'id'>) => { db.collection('repairs').add({ ...repair, userId: user.id }); };
+    const updateRepair = (updated: Repair) => { const { id, ...data } = updated; db.collection('repairs').doc(id).set(data, { merge: true }); };
+
     const addContractor = (contractor: Omit<Contractor, 'id'>) => {
-        const newContractor = { ...contractor, id: crypto.randomUUID() };
-        setContractors(c => [...c, newContractor]);
-        return newContractor;
+        const newContractor = { ...contractor, userId: user.id };
+        const docRef = db.collection('contractors').doc();
+        docRef.set(newContractor);
+        return { ...newContractor, id: docRef.id };
     };
-    const updateContractor = (updated: Contractor) => setContractors(c => c.map(con => con.id === updated.id ? updated : con));
+    const updateContractor = (updated: Contractor) => { const { id, ...data } = updated; db.collection('contractors').doc(id).set(data, { merge: true }); };
+
 
     const value = useMemo(() => ({
         properties, payments, repairs, contractors, addProperty, updateProperty, addPayment, updatePayment, addRepair, updateRepair, addContractor, updateContractor
     }), [properties, payments, repairs, contractors]);
     
-    return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
+    return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };
 
 
