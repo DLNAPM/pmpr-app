@@ -1,9 +1,11 @@
-import React, { useState, useMemo, useRef } from 'react';
+
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant, Payment, RepairStatus } from '../types';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { ArrowDownTrayIcon, ArrowUpTrayIcon } from '../components/Icons';
 import Modal from '../components/Modal';
+import { ReportFilter } from '../App';
 
 interface ReportItem {
     date: string;
@@ -30,8 +32,13 @@ interface ImportPreview {
     errors: { row: number; message: string }[];
 }
 
+interface ReportingScreenProps {
+    initialFilter: ReportFilter | null;
+    onFilterApplied: () => void;
+}
 
-const ReportingScreen: React.FC = () => {
+
+const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilterApplied }) => {
     const { properties, payments, repairs, addPayment, updatePayment, addRepair } = useAppContext();
     
     const [filters, setFilters] = useState({
@@ -40,11 +47,19 @@ const ReportingScreen: React.FC = () => {
         tenantId: 'all',
         startDate: '',
         endDate: '',
+        status: 'all' as 'all' | 'collected' | 'outstanding',
     });
     
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (initialFilter) {
+            setFilters(prev => ({ ...prev, status: initialFilter.status }));
+            onFilterApplied();
+        }
+    }, [initialFilter, onFilterApplied]);
 
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -124,6 +139,9 @@ const ReportingScreen: React.FC = () => {
                 endOfDay.setHours(23, 59, 59, 999);
                 if (itemDate > endOfDay) return false;
             }
+
+            if (filters.status === 'outstanding' && item.balance <= 0) return false;
+            if (filters.status === 'collected' && item.paidAmount <= 0) return false;
 
             return true;
         }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -313,7 +331,12 @@ const ReportingScreen: React.FC = () => {
             </div>
             <Card>
                 <CardHeader><h3 className="font-semibold">Filters</h3></CardHeader>
-                <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                     <select name="status" value={filters.status} onChange={handleFilterChange} className="w-full p-2 border rounded">
+                        <option value="all">All Statuses</option>
+                        <option value="collected">Collected</option>
+                        <option value="outstanding">Outstanding</option>
+                    </select>
                     <select name="type" value={filters.type} onChange={handleFilterChange} className="w-full p-2 border rounded">
                         <option value="all">All Types</option>
                         <option value="rent">Rent</option>

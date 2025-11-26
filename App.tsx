@@ -12,11 +12,13 @@ import LoginScreen from './screens/LoginScreen';
 import HelpModal from './components/HelpModal';
 
 type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting';
+export type ReportFilter = { status: 'all' | 'collected' | 'outstanding' };
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [action, setAction] = useState<string | null>(null);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [initialReportFilter, setInitialReportFilter] = useState<ReportFilter | null>(null);
   const { authStatus, user, logout } = useAuth();
 
   if (authStatus === 'idle' || authStatus === 'loading') {
@@ -27,13 +29,18 @@ const App: React.FC = () => {
     setActiveTab(tab);
     setAction(actionName);
   };
+  
+  const handleNavigateToReport = (filter: ReportFilter) => {
+    setInitialReportFilter(filter);
+    setActiveTab('reporting');
+  };
 
   const onActionDone = () => setAction(null);
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardScreen onAction={handleAction} />;
+        return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
       case 'properties':
         return <PropertiesScreen action={action} onActionDone={onActionDone} />;
       case 'payments':
@@ -43,9 +50,9 @@ const App: React.FC = () => {
       case 'contractors':
         return <ContractorsScreen />;
       case 'reporting':
-        return <ReportingScreen />;
+        return <ReportingScreen initialFilter={initialReportFilter} onFilterApplied={() => setInitialReportFilter(null)} />;
       default:
-        return <DashboardScreen onAction={handleAction} />;
+        return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
     }
   };
 

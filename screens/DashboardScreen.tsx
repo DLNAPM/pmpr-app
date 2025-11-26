@@ -1,12 +1,15 @@
+
 import React, { useMemo } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import ProgressBar from '../components/ProgressBar';
 import { useAppContext } from '../contexts/AppContext';
 import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon, CurrencyDollarIcon, ArrowTopRightOnSquareIcon } from '../components/Icons';
 import { RepairStatus } from '../types';
+import { ReportFilter } from '../App';
 
 interface DashboardScreenProps {
   onAction: (tab: 'properties' | 'payments' | 'repairs' | 'reporting' | 'contractors', action?: string) => void;
+  onNavigateToReport: (filter: ReportFilter) => void;
 }
 
 // Helper to generate a deterministic, fake property value for the demo
@@ -23,7 +26,7 @@ const getFakeRedfinValue = (propertyId: string) => {
 };
 
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateToReport }) => {
     const { properties, payments, repairs, getSiteHealthScore } = useAppContext();
 
     // New summary for ALL-TIME financial data
@@ -149,9 +152,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction }) => {
 
                 {/* Summary Cards (All-Time) */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <Card><CardContent><p className="text-sm text-gray-500">Total Collected</p><p className="text-2xl font-bold text-green-600">{formatCurrency(overallSummary.totalCollected)}</p></CardContent></Card>
-                    <Card><CardContent><p className="text-sm text-gray-500">Outstanding</p><p className="text-2xl font-bold text-red-600">{formatCurrency(overallSummary.totalOutstanding)}</p></CardContent></Card>
-                    <Card><CardContent><p className="text-sm text-gray-500">Total Billed</p><p className="text-2xl font-bold text-blue-800">{formatCurrency(overallSummary.totalBilled)}</p></CardContent></Card>
+                    <Card onClick={() => onNavigateToReport({ status: 'collected' })}><CardContent><p className="text-sm text-gray-500">Total Collected</p><p className="text-2xl font-bold text-green-600">{formatCurrency(overallSummary.totalCollected)}</p></CardContent></Card>
+                    <Card onClick={() => onNavigateToReport({ status: 'outstanding' })}><CardContent><p className="text-sm text-gray-500">Outstanding</p><p className="text-2xl font-bold text-red-600">{formatCurrency(overallSummary.totalOutstanding)}</p></CardContent></Card>
+                    <Card onClick={() => onNavigateToReport({ status: 'all' })}><CardContent><p className="text-sm text-gray-500">Total Billed</p><p className="text-2xl font-bold text-blue-800">{formatCurrency(overallSummary.totalBilled)}</p></CardContent></Card>
                 </div>
 
                 {/* Overall Collection (This Month) */}
