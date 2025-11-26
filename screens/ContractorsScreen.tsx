@@ -14,22 +14,34 @@ const ContractorForm: React.FC<{
     const [formData, setFormData] = useState({
         name: contractor?.name || '',
         contact: contractor?.contact || '',
+        companyName: contractor?.companyName || '',
+        companyAddress: contractor?.companyAddress || '',
+        email: contractor?.email || '',
+        comments: contractor?.comments || '',
     });
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({...prev, [name]: value}));
     };
     
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(contractor ? { ...formData, id: contractor.id } : formData);
+        if (formData.name && formData.contact) {
+            onSave(contractor ? { ...formData, id: contractor.id } : formData);
+        } else {
+            alert("Contact Person Name and Phone are required.");
+        }
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Contractor Name" required className="w-full p-2 border rounded" />
-            <input type="text" name="contact" value={formData.contact} onChange={handleChange} placeholder="Contact Info (Phone/Email)" required className="w-full p-2 border rounded" />
+            <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Contact Person Name" required className="w-full p-2 border rounded" />
+            <input type="text" name="contact" value={formData.contact} onChange={handleChange} placeholder="Contact Phone" required className="w-full p-2 border rounded" />
+            <input type="text" name="companyName" value={formData.companyName} onChange={handleChange} placeholder="Company Name" className="w-full p-2 border rounded" />
+            <input type="text" name="companyAddress" value={formData.companyAddress} onChange={handleChange} placeholder="Company Address" className="w-full p-2 border rounded" />
+            <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="Email Address" className="w-full p-2 border rounded" />
+            <textarea name="comments" value={formData.comments} onChange={handleChange} placeholder="Comments..." rows={3} className="w-full p-2 border rounded" />
             <div className="flex justify-end gap-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Save Contractor</button>
@@ -74,8 +86,24 @@ const ContractorsScreen: React.FC = () => {
     };
     
     const handleExport = () => {
-        const headers = ['Name', 'Contact'];
-        const rows = contractors.map(c => `"${c.name}","${c.contact}"`);
+        const headers = ['Name', 'Contact', 'CompanyName', 'CompanyAddress', 'Email', 'Comments'];
+        
+        const escapeCsvCell = (cellData: string | undefined) => {
+            if (cellData === undefined || cellData === null) return '';
+            const str = String(cellData);
+            // If the cell contains a comma, quote, or newline, wrap it in double quotes.
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                // Escape existing double quotes by doubling them
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        const rows = contractors.map(c => 
+            [c.name, c.contact, c.companyName, c.companyAddress, c.email, c.comments]
+            .map(escapeCsvCell)
+            .join(',')
+        );
         
         const csvContent = [headers.join(','), ...rows].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -118,16 +146,23 @@ const ContractorsScreen: React.FC = () => {
         const preview: ImportPreview = { validRecords: [], errors: [] };
 
         for (let i = 1; i < lines.length; i++) {
+            // This is a simple parser and doesn't handle quotes. For production, a more robust library would be better.
             const values = lines[i].split(',');
-            const name = values[0]?.trim();
-            const contact = values[1]?.trim();
+            const rowData: Omit<Contractor, 'id'> = {
+                name: values[headers.indexOf('Name')]?.trim() || '',
+                contact: values[headers.indexOf('Contact')]?.trim() || '',
+                companyName: values[headers.indexOf('CompanyName')]?.trim(),
+                companyAddress: values[headers.indexOf('CompanyAddress')]?.trim(),
+                email: values[headers.indexOf('Email')]?.trim(),
+                comments: values[headers.indexOf('Comments')]?.trim(),
+            };
 
-            if (!name || !contact) {
+            if (!rowData.name || !rowData.contact) {
                 preview.errors.push({ row: i + 1, message: 'Missing Name or Contact.' });
                 continue;
             }
 
-            preview.validRecords.push({ name, contact });
+            preview.validRecords.push(rowData);
         }
         
         setImportPreview(preview);
@@ -171,18 +206,24 @@ const ContractorsScreen: React.FC = () => {
             <div className="space-y-4">
                 {contractors.map(c => (
                      <Card key={c.id}>
-                        <CardContent className="flex justify-between items-center">
-                            <div>
-                                <p className="font-semibold text-lg">{c.name}</p>
-                                <p className="text-gray-600">{c.contact}</p>
+                        <CardContent>
+                            <div className="flex justify-between items-start">
+                                <div className="space-y-1">
+                                    <p className="font-bold text-lg text-blue-800">{c.companyName || c.name}</p>
+                                    {c.companyName && <p className="font-semibold">{c.name}</p>}
+                                    <p className="text-gray-600 text-sm">{c.contact}</p>
+                                    {c.email && <p className="text-gray-600 text-sm">{c.email}</p>}
+                                    {c.companyAddress && <p className="text-gray-600 text-sm">{c.companyAddress}</p>}
+                                    {c.comments && <p className="text-sm text-gray-500 italic mt-2 p-2 bg-slate-50 rounded-md">{c.comments}</p>}
+                                </div>
+                                <button 
+                                    onClick={() => openEditModal(c)}
+                                    className="text-gray-400 hover:text-blue-600 p-2 rounded-full transition-colors flex-shrink-0"
+                                    aria-label="Edit Contractor"
+                                >
+                                    <PencilSquareIcon className="w-5 h-5"/>
+                                </button>
                             </div>
-                            <button 
-                                onClick={() => openEditModal(c)}
-                                className="text-gray-400 hover:text-blue-600 p-2 rounded-full transition-colors"
-                                aria-label="Edit Contractor"
-                            >
-                                <PencilSquareIcon className="w-5 h-5"/>
-                            </button>
                         </CardContent>
                     </Card>
                 ))}

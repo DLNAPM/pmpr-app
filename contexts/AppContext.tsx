@@ -37,8 +37,8 @@ const initialGuestData = {
     ],
     repairs: [],
     contractors: [
-        { id: 'c1', name: 'Reliable Plumbing', contact: '555-PLUMBER' },
-        { id: 'c2', name: 'Sparky Electricians', contact: '555-SPARKY' }
+        { id: 'c1', name: 'Bob Smith', contact: '555-PLUMBER', companyName: 'Reliable Plumbing', email: 'bob@reliable.com', companyAddress: '123 Pipe St, Plumberville', comments: 'Available 24/7 for emergencies.' },
+        { id: 'c2', name: 'Jane Spark', contact: '555-SPARKY', companyName: 'Sparky Electricians', email: 'jane@sparky.com', companyAddress: '456 Circuit Ave, Ohmstown', comments: '' }
     ],
 };
 
@@ -200,7 +200,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return <GuestDataProvider>{children}</GuestDataProvider>;
     }
 
-    return <AppProviderLogic data={{ properties: [], payments: [], repairs: [], contractors: [], addProperty: () => {}, updateProperty: () => {}, addPayment: () => {}, updatePayment: () => {}, addRepair: () => {}, updateRepair: () => {}, addContractor: () => ({id:'',name:'',contact:''}), updateContractor: () => {} }} isLoading={true}>{children}</AppProviderLogic>;
+    // This is the placeholder data provider for when the app is loading or uninitialized.
+    const loadingData = {
+      properties: [],
+      payments: [],
+      repairs: [],
+      contractors: [],
+      addProperty: () => { console.warn("Data context not ready."); },
+      updateProperty: () => { console.warn("Data context not ready."); },
+      addPayment: () => { console.warn("Data context not ready."); },
+      updatePayment: () => { console.warn("Data context not ready."); },
+      addRepair: () => { console.warn("Data context not ready."); },
+      updateRepair: () => { console.warn("Data context not ready."); },
+      addContractor: (c: Omit<Contractor, 'id'>) => {
+        console.warn("Data context not ready.");
+        return { ...c, id: 'loading-id' };
+      },
+      updateContractor: () => { console.warn("Data context not ready."); }
+    };
+
+    return <AppProviderLogic data={loadingData} isLoading={true}>{children}</AppProviderLogic>;
 };
 
 

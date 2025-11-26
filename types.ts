@@ -32,8 +32,12 @@ export interface Payment {
 
 export interface Contractor {
   id: string;
-  name: string;
-  contact: string; // Could be phone, email, etc.
+  name: string; // Contact Person Name
+  contact: string; // Contact Phone
+  companyName?: string;
+  companyAddress?: string;
+  email?: string;
+  comments?: string;
 }
 
 export interface Repair {

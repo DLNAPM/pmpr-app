@@ -7,22 +7,39 @@ import { PlusIcon, WrenchScrewdriverIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { REPAIR_STATUS_OPTIONS } from '../constants';
 
-const ContractorForm: React.FC<{onSave: (contractor: Contractor) => void; onCancel: () => void;}> = ({ onSave, onCancel }) => {
-    const [name, setName] = useState('');
-    const [contact, setContact] = useState('');
+const ContractorForm: React.FC<{onSave: (contractor: Omit<Contractor, 'id'>) => void; onCancel: () => void;}> = ({ onSave, onCancel }) => {
+    const [formData, setFormData] = useState({
+        name: '',
+        contact: '',
+        companyName: '',
+        companyAddress: '',
+        email: '',
+        comments: '',
+    });
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({...prev, [name]: value}));
+    };
     
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (name && contact) {
-            onSave({ id: '', name, contact });
+        if (formData.name && formData.contact) {
+            onSave(formData);
+        } else {
+            alert("Contact Person Name and Phone are required.");
         }
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
              <h4 className="font-semibold text-lg">Add New Contractor</h4>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Contractor Name" required className="w-full p-2 border rounded" />
-            <input type="text" value={contact} onChange={e => setContact(e.target.value)} placeholder="Contact Info (Phone/Email)" required className="w-full p-2 border rounded" />
+            <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Contact Person Name" required className="w-full p-2 border rounded" />
+            <input type="text" name="contact" value={formData.contact} onChange={handleChange} placeholder="Contact Phone" required className="w-full p-2 border rounded" />
+            <input type="text" name="companyName" value={formData.companyName} onChange={handleChange} placeholder="Company Name" className="w-full p-2 border rounded" />
+            <input type="text" name="companyAddress" value={formData.companyAddress} onChange={handleChange} placeholder="Company Address" className="w-full p-2 border rounded" />
+            <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="Email Address" className="w-full p-2 border rounded" />
+            <textarea name="comments" value={formData.comments} onChange={handleChange} placeholder="Comments..." rows={3} className="w-full p-2 border rounded" />
             <div className="flex justify-end gap-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Save Contractor</button>
@@ -112,7 +129,7 @@ const RepairForm: React.FC<{
                     <label htmlFor="contractorId" className="block text-sm font-medium text-gray-700">Contractor</label>
                     <select id="contractorId" name="contractorId" value={formData.contractorId} onChange={handleChange} className="w-full p-2 border rounded mt-1">
                         <option value="">Select a Contractor</option>
-                        {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {contractors.map(c => <option key={c.id} value={c.id}>{c.name} ({c.companyName || 'N/A'})</option>)}
                         <option value="add_new" className="font-bold text-blue-600">-- Add New Contractor --</option>
                     </select>
                 </div>
