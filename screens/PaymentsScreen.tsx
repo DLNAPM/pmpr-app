@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
@@ -7,11 +8,12 @@ import { CreditCardIcon, PlusIcon, PencilSquareIcon } from '../components/Icons'
 import { MONTHS } from '../constants';
 
 const PaymentForm: React.FC<{
-    property: Property; 
+    property: Property;
+    allPaymentsForProperty: Payment[];
     payment?: Payment;
     onSave: (payment: Omit<Payment, 'id'> | Payment) => void; 
     onCancel: () => void;
-}> = ({ property, payment, onSave, onCancel }) => {
+}> = ({ property, allPaymentsForProperty, payment, onSave, onCancel }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth() + 1;
 
@@ -27,6 +29,37 @@ const PaymentForm: React.FC<{
         }
         return property.utilitiesToTrack.map(u => ({ category: u, billAmount: 0, paidAmount: 0 }));
     });
+    
+    const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+
+    const previousBalances = useMemo(() => {
+        // No balance carry-forward when editing an existing record
+        if (payment) return { rent: 0, utilities: {}, total: 0 };
+
+        // Calculate the previous month's year and month (1-12)
+        const prevMonthDate = new Date(year, month - 2); // month is 1-12, so month-2 gives the previous month's index
+        const prevYear = prevMonthDate.getFullYear();
+        const prevMonth = prevMonthDate.getMonth() + 1;
+
+        const prevPayment = allPaymentsForProperty.find(
+            p => p.year === prevYear && p.month === prevMonth
+        );
+
+        if (!prevPayment) {
+            return { rent: 0, utilities: {}, total: 0 };
+        }
+
+        const rentBalance = Math.max(0, prevPayment.rentBillAmount - prevPayment.rentPaidAmount);
+        
+        const utilsBalances: { [key: string]: number } = {};
+        prevPayment.utilities.forEach(util => {
+            utilsBalances[util.category] = Math.max(0, util.billAmount - util.paidAmount);
+        });
+
+        const total = rentBalance + Object.values(utilsBalances).reduce((sum, bal) => sum + bal, 0);
+
+        return { rent: rentBalance, utilities: utilsBalances, total };
+    }, [payment, year, month, allPaymentsForProperty]);
 
     const handleUtilityChange = (index: number, field: keyof UtilityPayment, value: any) => {
         const newUtils = [...utilities];
@@ -56,6 +89,14 @@ const PaymentForm: React.FC<{
     return (
          <form onSubmit={handleSubmit} className="space-y-4">
             <h3 className="text-lg font-semibold">{property.name}</h3>
+            {previousBalances.total > 0 && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+                    <p className="font-semibold">
+                        Total Balance Carried Forward: {formatCurrency(previousBalances.total)}
+                    </p>
+                    <p>This amount is from the previous month's unpaid bills.</p>
+                </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
                 <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full p-2 border rounded" disabled={!!payment}>
                     {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
@@ -70,6 +111,11 @@ const PaymentForm: React.FC<{
 
             <div className="p-3 border rounded-lg space-y-2">
                 <label className="font-medium">Rent</label>
+                {previousBalances.rent > 0 && (
+                    <p className="text-xs text-red-600 font-medium">
+                        Previous Balance: {formatCurrency(previousBalances.rent)}
+                    </p>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                     <input type="number" readOnly value={property.rentAmount} className="w-full p-2 border rounded bg-gray-100" />
                     <input type="number" value={rentPaidAmount} onChange={(e) => setRentPaidAmount(parseFloat(e.target.value) || 0)} className="w-full p-2 border rounded" />
@@ -78,6 +124,11 @@ const PaymentForm: React.FC<{
             {utilities.map((util, index) => (
                 <div key={util.category} className="p-3 border rounded-lg space-y-2">
                      <label className="font-medium">{util.category}</label>
+                     {previousBalances.utilities[util.category] > 0 && (
+                        <p className="text-xs text-red-600 font-medium">
+                            Previous Balance: {formatCurrency(previousBalances.utilities[util.category])}
+                        </p>
+                     )}
                      <div className="grid grid-cols-2 gap-2">
                         <input type="number" value={util.billAmount} onChange={(e) => handleUtilityChange(index, 'billAmount', e.target.value)} className="w-full p-2 border rounded" />
                         <input type="number" value={util.paidAmount} onChange={(e) => handleUtilityChange(index, 'paidAmount', e.target.value)} className="w-full p-2 border rounded" />
@@ -235,6 +286,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
                     <PaymentForm 
                         property={selectedProperty}
                         payment={selectedPayment}
+                        allPaymentsForProperty={propertyPayments}
                         onSave={handleSavePayment}
                         onCancel={() => setIsModalOpen(false)}
                     />
