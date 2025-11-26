@@ -6,6 +6,7 @@ import { Repair, RepairStatus, Contractor } from '../types';
 import { PlusIcon, WrenchScrewdriverIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { REPAIR_STATUS_OPTIONS } from '../constants';
+import { EditTarget } from '../App';
 
 const ContractorForm: React.FC<{onSave: (contractor: Omit<Contractor, 'id'>) => void; onCancel: () => void;}> = ({ onSave, onCancel }) => {
     const [formData, setFormData] = useState({
@@ -146,10 +147,11 @@ const RepairForm: React.FC<{
 
 interface RepairsScreenProps {
   action: string | null;
+  editTarget: EditTarget | null;
   onActionDone: () => void;
 }
 
-const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, onActionDone }) => {
+const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, repairs, contractors, addRepair, updateRepair, addContractor, getPropertyById, getContractorById } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined);
@@ -163,12 +165,29 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, onActionDone }) =
         setIsModalOpen(true);
     }, [properties.length]);
 
+    const openEditModal = useCallback((repair: Repair) => {
+        setSelectedRepair(repair);
+        setIsModalOpen(true);
+    }, []);
+
      useEffect(() => {
         if (action === 'add') {
           openAddModal();
           onActionDone();
         }
     }, [action, onActionDone, openAddModal]);
+
+    useEffect(() => {
+        if (editTarget && editTarget.type === 'repair') {
+            const repairToEdit = repairs.find(r => r.id === editTarget.id);
+            if (repairToEdit) {
+                openEditModal(repairToEdit);
+            } else {
+                alert("Could not find the repair record to edit.");
+            }
+            onActionDone();
+        }
+    }, [editTarget, onActionDone, repairs, openEditModal]);
 
     const handleSave = (repairData: Omit<Repair, 'id'> | Repair) => {
         if ('id' in repairData) {
@@ -178,11 +197,6 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, onActionDone }) =
         }
         setIsModalOpen(false);
         setSelectedRepair(undefined);
-    };
-
-    const openEditModal = (repair: Repair) => {
-        setSelectedRepair(repair);
-        setIsModalOpen(true);
     };
     
     const getStatusColor = (status: RepairStatus) => {

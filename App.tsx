@@ -16,6 +16,7 @@ export type ReportFilter = {
   status?: 'all' | 'collected' | 'outstanding';
   repairStatus?: 'all' | 'open' | 'completed';
 };
+export type EditTarget = { type: 'payment' | 'repair', id: string };
 
 
 const App: React.FC = () => {
@@ -23,6 +24,7 @@ const App: React.FC = () => {
   const [action, setAction] = useState<string | null>(null);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [initialReportFilter, setInitialReportFilter] = useState<ReportFilter | null>(null);
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const { authStatus, user, logout } = useAuth();
 
   if (authStatus === 'idle' || authStatus === 'loading') {
@@ -39,7 +41,16 @@ const App: React.FC = () => {
     setActiveTab('reporting');
   };
 
-  const onActionDone = () => setAction(null);
+  const handleEditFromReport = (target: EditTarget) => {
+    setEditTarget(target);
+    setActiveTab(target.type === 'payment' ? 'payments' : 'repairs');
+  };
+
+  const onActionDone = () => {
+    setAction(null);
+    setEditTarget(null);
+  };
+
 
   const renderContent = () => {
     switch (activeTab) {
@@ -48,13 +59,17 @@ const App: React.FC = () => {
       case 'properties':
         return <PropertiesScreen action={action} onActionDone={onActionDone} />;
       case 'payments':
-        return <PaymentsScreen action={action} onActionDone={onActionDone} />;
+        return <PaymentsScreen action={action} editTarget={editTarget} onActionDone={onActionDone} />;
       case 'repairs':
-        return <RepairsScreen action={action} onActionDone={onActionDone} />;
+        return <RepairsScreen action={action} editTarget={editTarget} onActionDone={onActionDone} />;
       case 'contractors':
         return <ContractorsScreen />;
       case 'reporting':
-        return <ReportingScreen initialFilter={initialReportFilter} onFilterApplied={() => setInitialReportFilter(null)} />;
+        return <ReportingScreen 
+                  initialFilter={initialReportFilter} 
+                  onFilterApplied={() => setInitialReportFilter(null)} 
+                  onEditItem={handleEditFromReport}
+                />;
       default:
         return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
     }

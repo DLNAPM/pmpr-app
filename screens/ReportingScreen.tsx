@@ -1,11 +1,11 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
-import { Property, Tenant, Payment, RepairStatus } from '../types';
+import { Property, Tenant, Payment, RepairStatus, Repair } from '../types';
 import Card, { CardContent, CardHeader } from '../components/Card';
-import { ArrowDownTrayIcon, ArrowUpTrayIcon } from '../components/Icons';
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, PencilSquareIcon } from '../components/Icons';
 import Modal from '../components/Modal';
-import { ReportFilter } from '../App';
+import { ReportFilter, EditTarget } from '../App';
 
 interface ReportItem {
     date: string;
@@ -17,6 +17,7 @@ interface ReportItem {
     paidAmount: number;
     balance: number;
     repairStatus?: RepairStatus;
+    originalId: string;
 }
 
 interface CsvRow {
@@ -36,10 +37,11 @@ interface ImportPreview {
 interface ReportingScreenProps {
     initialFilter: ReportFilter | null;
     onFilterApplied: () => void;
+    onEditItem: (target: EditTarget) => void;
 }
 
 
-const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilterApplied }) => {
+const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilterApplied, onEditItem }) => {
     const { properties, payments, repairs, addPayment, updatePayment, addRepair } = useAppContext();
     
     const [filters, setFilters] = useState({
@@ -100,6 +102,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                 billAmount: p.rentBillAmount,
                 paidAmount: p.rentPaidAmount,
                 balance: p.rentBillAmount - p.rentPaidAmount,
+                originalId: p.id,
             });
 
             p.utilities.forEach(u => {
@@ -112,6 +115,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                     billAmount: u.billAmount,
                     paidAmount: u.paidAmount,
                     balance: u.billAmount - u.paidAmount,
+                    originalId: p.id,
                 });
             });
         });
@@ -129,6 +133,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                 paidAmount: r.status === 'Complete' ? r.cost : 0,
                 balance: r.status === 'Complete' ? 0 : r.cost,
                 repairStatus: r.status,
+                originalId: r.id,
             });
         });
 
@@ -390,11 +395,12 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Billed</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredData.map((item, index) => (
-                                    <tr key={index}>
+                                    <tr key={`${item.originalId}-${item.category}-${index}`}>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">{new Date(item.date).toLocaleDateString()}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">{item.propertyName}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -405,11 +411,20 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right">{formatCurrency(item.billAmount)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600">{formatCurrency(item.paidAmount)}</td>
                                         <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-semibold ${item.balance > 0 ? 'text-red-600' : ''}`}>{formatCurrency(item.balance)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <button
+                                              onClick={() => onEditItem({ type: item.type === 'Repair' ? 'repair' : 'payment', id: item.originalId })}
+                                              className="text-blue-600 hover:text-blue-900 p-1"
+                                              aria-label="Edit Item"
+                                            >
+                                                <PencilSquareIcon className="w-5 h-5"/>
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                                 {filteredData.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} className="text-center py-10 text-gray-500">No data matches your filters.</td>
+                                        <td colSpan={7} className="text-center py-10 text-gray-500">No data matches your filters.</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -418,7 +433,9 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                                     <td colSpan={3} className="px-6 py-3 text-right text-sm font-bold uppercase">Totals:</td>
                                     <td className="px-6 py-3 text-right text-sm font-bold">{formatCurrency(totals.billAmount)}</td>
                                     <td className="px-6 py-3 text-right text-sm font-bold text-green-700">{formatCurrency(totals.paidAmount)}</td>
+                                    {/* FIX: Corrected the className syntax from a broken string to a valid JSX template literal for dynamic styling. */}
                                     <td className={`px-6 py-3 text-right text-sm font-bold ${totals.balance > 0 ? 'text-red-700' : ''}`}>{formatCurrency(totals.balance)}</td>
+                                    <td></td>
                                 </tr>
                             </tfoot>
                         </table>

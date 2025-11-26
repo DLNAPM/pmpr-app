@@ -6,6 +6,7 @@ import { Payment, Property, UtilityPayment } from '../types';
 import Modal from '../components/Modal';
 import { CreditCardIcon, PlusIcon, PencilSquareIcon } from '../components/Icons';
 import { MONTHS } from '../constants';
+import { EditTarget } from '../App';
 
 const PaymentForm: React.FC<{
     property: Property;
@@ -147,10 +148,11 @@ const PaymentForm: React.FC<{
 
 interface PaymentsScreenProps {
   action: string | null;
+  editTarget: EditTarget | null;
   onActionDone: () => void;
 }
 
-const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone }) => {
+const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, payments, getPaymentsForProperty, addPayment, updatePayment } = useAppContext();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -165,10 +167,10 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
         }
     }, [properties.length]);
     
-    const openEditModal = (payment: Payment) => {
+    const openEditModal = useCallback((payment: Payment) => {
         setSelectedPayment(payment);
         setIsModalOpen(true);
-    };
+    }, []);
 
     useEffect(() => {
         if (action === 'add') {
@@ -176,6 +178,19 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, onActionDone })
           onActionDone();
         }
     }, [action, onActionDone, openAddModal]);
+
+    useEffect(() => {
+        if (editTarget && editTarget.type === 'payment') {
+            const paymentToEdit = payments.find(p => p.id === editTarget.id);
+            if (paymentToEdit) {
+                setSelectedPropertyId(paymentToEdit.propertyId);
+                openEditModal(paymentToEdit);
+            } else {
+                alert("Could not find the payment record to edit.");
+            }
+            onActionDone();
+        }
+    }, [editTarget, onActionDone, payments, openEditModal]);
     
     useEffect(() => {
         if (!selectedPropertyId && properties.length > 0) {
