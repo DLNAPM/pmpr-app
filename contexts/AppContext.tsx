@@ -23,7 +23,7 @@ const initialGuestData = {
         {
             id: 'payment1',
             propertyId: 'prop1',
-            month: new Date().getMonth(), // Last month
+            month: new Date().getMonth() + 1, // Last month (Corrected to be 1-indexed)
             year: new Date().getFullYear(),
             rentBillAmount: 1500,
             rentPaidAmount: 1500,
