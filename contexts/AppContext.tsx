@@ -58,6 +58,7 @@ interface AppContextType {
   isLoading: boolean;
   addProperty: (property: Omit<Property, 'id'>) => void;
   updateProperty: (updatedProperty: Property) => void;
+  deleteProperty: (propertyId: string) => void;
   addPayment: (payment: Omit<Payment, 'id'>) => void;
   updatePayment: (updatedPayment: Payment) => void;
   deletePayment: (paymentId: string) => void;
@@ -91,6 +92,11 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     // Guest-specific data logic
     const addProperty = (property: Omit<Property, 'id'>) => setProperties(p => [...p, { ...property, id: crypto.randomUUID() }]);
     const updateProperty = (updated: Property) => setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
+    const deleteProperty = (id: string) => {
+        setProperties(p => p.filter(prop => prop.id !== id));
+        setPayments(p => p.filter(pay => pay.propertyId !== id));
+        setRepairs(r => r.filter(rep => rep.propertyId !== id));
+    };
     const addPayment = (payment: Omit<Payment, 'id'>) => setPayments(p => [...p, { ...payment, id: crypto.randomUUID() }]);
     const updatePayment = (updated: Payment) => setPayments(p => p.map(pay => pay.id === updated.id ? updated : pay));
     const deletePayment = (id: string) => setPayments(p => p.filter(pay => pay.id !== id));
@@ -105,7 +111,7 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const updateContractor = (updated: Contractor) => setContractors(c => c.map(con => con.id === updated.id ? updated : con));
 
     const value = useMemo(() => ({
-        properties, payments, repairs, contractors, addProperty, updateProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor
+        properties, payments, repairs, contractors, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor
     }), [properties, payments, repairs, contractors]);
 
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
@@ -148,6 +154,27 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
     
     const addProperty = (property: Omit<Property, 'id'>) => { db.collection('properties').add({ ...property, userId: user.id }); };
     const updateProperty = (updated: Property) => { const { id, ...data } = updated; db.collection('properties').doc(id).set(data, { merge: true }); };
+    const deleteProperty = async (id: string) => {
+        if (!db) return;
+        const batch = db.batch();
+
+        const paymentsQuery = db.collection('payments').where('propertyId', '==', id);
+        const paymentsSnapshot = await paymentsQuery.get();
+        paymentsSnapshot.forEach((doc: any) => batch.delete(doc.ref));
+
+        const repairsQuery = db.collection('repairs').where('propertyId', '==', id);
+        const repairsSnapshot = await repairsQuery.get();
+        repairsSnapshot.forEach((doc: any) => batch.delete(doc.ref));
+        
+        const propertyRef = db.collection('properties').doc(id);
+        batch.delete(propertyRef);
+
+        try {
+            await batch.commit();
+        } catch (e) {
+            console.error("Error deleting property and related data: ", e);
+        }
+    };
     
     const addPayment = (payment: Omit<Payment, 'id'>) => { db.collection('payments').add({ ...payment, userId: user.id }); };
     const updatePayment = (updated: Payment) => { const { id, ...data } = updated; db.collection('payments').doc(id).set(data, { merge: true }); };
@@ -167,7 +194,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
 
 
     const value = useMemo(() => ({
-        properties, payments, repairs, contractors, addProperty, updateProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor
+        properties, payments, repairs, contractors, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor
     }), [properties, payments, repairs, contractors]);
     
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
@@ -249,6 +276,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       contractors: [],
       addProperty: () => { console.warn("Data context not ready."); },
       updateProperty: () => { console.warn("Data context not ready."); },
+      deleteProperty: () => { console.warn("Data context not ready."); },
       addPayment: () => { console.warn("Data context not ready."); },
       updatePayment: () => { console.warn("Data context not ready."); },
       deletePayment: () => { console.warn("Data context not ready."); },

@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant } from '../types';
-import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon } from '../components/Icons';
+import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { UTILITY_CATEGORIES } from '../constants';
 
@@ -107,7 +106,7 @@ interface PropertiesScreenProps {
 }
 
 const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDone }) => {
-    const { properties, addProperty, updateProperty } = useAppContext();
+    const { properties, addProperty, updateProperty, deleteProperty } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState<Property | undefined>(undefined);
 
@@ -139,6 +138,15 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
         setSelectedProperty(undefined);
     };
 
+    const handleDelete = (propertyId: string) => {
+        const property = properties.find(p => p.id === propertyId);
+        if (!property) return;
+        if (window.confirm(`Are you sure you want to delete "${property.name}"? This will also delete ALL associated payment and repair records. This action cannot be undone.`)) {
+            deleteProperty(propertyId);
+        }
+    };
+
+
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
@@ -150,30 +158,39 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {properties.map(prop => (
-                    <Card key={prop.id} onClick={() => openEditModal(prop)}>
+                    <Card key={prop.id}>
                         <CardHeader className="flex justify-between items-start">
-                            <div>
-                                <h3 className="font-bold text-lg text-blue-800">{prop.name}</h3>
+                            <div className="flex-1 pr-2" onClick={() => openEditModal(prop)}>
+                                <h3 className="font-bold text-lg text-blue-800 cursor-pointer">{prop.name}</h3>
                                 <a
                                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(prop.address)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
-                                  className="group inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 transition-colors"
+                                  className="group inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 transition-colors cursor-pointer"
                                 >
                                   <MapPinIcon className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
                                   <span>{prop.address}</span>
                                 </a>
                             </div>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); openEditModal(prop); }} 
-                                className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors"
-                                aria-label="Edit Property"
-                            >
-                                <PencilSquareIcon className="w-5 h-5"/>
-                            </button>
+                            <div className="flex items-center flex-shrink-0">
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); openEditModal(prop); }} 
+                                    className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors"
+                                    aria-label="Edit Property"
+                                >
+                                    <PencilSquareIcon className="w-5 h-5"/>
+                                </button>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(prop.id); }} 
+                                    className="text-gray-400 hover:text-red-600 p-1 rounded-full transition-colors"
+                                    aria-label="Delete Property"
+                                >
+                                    <TrashIcon className="w-5 h-5"/>
+                                </button>
+                            </div>
                         </CardHeader>
-                        <CardContent>
+                         <CardContent onClick={() => openEditModal(prop)} className="cursor-pointer">
                             {prop.tenants.map(tenant => (
                                 <div key={tenant.id} className="flex items-center gap-3">
                                     <UserIcon className="w-5 h-5 text-gray-400" />

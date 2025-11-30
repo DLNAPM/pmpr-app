@@ -196,22 +196,22 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     };
 
     const handleReconcile = () => {
-        // Fix: Explicitly type the accumulator in `reduce` to ensure `paymentGroups` and `repairGroups`
-        // have a strong type. This helps TypeScript correctly infer the return type of `Object.values`
-        // as a typed array instead of `unknown[]`, fixing subsequent errors with `.length` and `.map`.
+        // Fix: Correctly type the initial value for the `reduce` method. Without this,
+        // TypeScript infers the result as `{}`, causing `Object.values` to return `unknown[]`
+        // and leading to subsequent errors on properties like `.length`.
         const paymentGroups = payments.reduce((acc: Record<string, Payment[]>, p) => {
             const key = `${p.propertyId}-${p.year}-${p.month}`;
             if (!acc[key]) acc[key] = [];
             acc[key].push(p);
             return acc;
-        }, {});
+        }, {} as Record<string, Payment[]>);
 
         const repairGroups = repairs.reduce((acc: Record<string, Repair[]>, r) => {
             const key = `${r.propertyId}-${r.description}-${r.cost}`;
             if (!acc[key]) acc[key] = [];
             acc[key].push(r);
             return acc;
-        }, {});
+        }, {} as Record<string, Repair[]>);
 
         const dupPayments = Object.values(paymentGroups).filter(g => g.length > 1);
         const dupRepairs = Object.values(repairGroups).filter(g => g.length > 1);
