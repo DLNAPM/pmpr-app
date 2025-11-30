@@ -4,6 +4,13 @@ import { Property, Payment, Repair, RepairStatus, Contractor } from '../types';
 import { useAuth, User } from './AuthContext';
 import { db, isFirebaseConfigured } from '../firebaseConfig';
 
+// --- Create more robust initial data for the previous month ---
+const now = new Date();
+// Set to the 1st of the current month, then go back one day to get the last day of the previous month.
+const prevMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
+const prevMonth = prevMonthDate.getMonth() + 1; // getMonth() is 0-indexed, so add 1
+const prevMonthYear = prevMonthDate.getFullYear();
+
 // This is the initial data for a new GUEST user.
 const initialGuestData = {
     properties: [
@@ -23,8 +30,8 @@ const initialGuestData = {
         {
             id: 'payment1',
             propertyId: 'prop1',
-            month: new Date().getMonth() + 1, // Current month (1-indexed)
-            year: new Date().getFullYear(),
+            month: prevMonth, // Previous month (1-indexed)
+            year: prevMonthYear,
             rentBillAmount: 1500,
             rentPaidAmount: 1500,
             utilities: [
@@ -32,7 +39,7 @@ const initialGuestData = {
                 { category: 'Electricity', billAmount: 85, paidAmount: 85 },
                 { category: 'Internet', billAmount: 60, paidAmount: 0 },
             ],
-            paymentDate: new Date().toISOString()
+            paymentDate: prevMonthDate.toISOString()
         }
     ],
     repairs: [],
