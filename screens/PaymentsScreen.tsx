@@ -202,19 +202,28 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a,b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
 
     const handleSavePayment = (paymentData: Omit<Payment, 'id'> | Payment) => {
-        if ('id' in paymentData) {
-            updatePayment(paymentData);
+        // This is a robust "upsert" logic. It finds an existing payment based on
+        // the unique combination of property, year, and month.
+        const existingPayment = payments.find(p =>
+            p.propertyId === paymentData.propertyId &&
+            p.year === paymentData.year &&
+            p.month === paymentData.month
+        );
+
+        if (existingPayment) {
+            // If a record for this month already exists, we update it.
+            // We combine the existing record's data (like its ID) with the new form data.
+            updatePayment({ ...existingPayment, ...paymentData });
         } else {
-            const existing = payments.find(p => p.propertyId === paymentData.propertyId && p.year === paymentData.year && p.month === paymentData.month);
-            if (existing) {
-                updatePayment({ ...existing, ...paymentData });
-            } else {
-                addPayment(paymentData);
-            }
+            // If no record for this month exists, it's a new payment.
+            // We cast to remove 'id' if it exists, as addPayment expects no id.
+            addPayment(paymentData as Omit<Payment, 'id'>);
         }
+
         setIsModalOpen(false);
         setSelectedPayment(undefined);
     };
+
 
     const getStatusInfo = (billed: number, paid: number) => {
         if (billed === 0 && paid === 0) return { text: 'Not Billed', color: 'bg-gray-100 text-gray-800' };
