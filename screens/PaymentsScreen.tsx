@@ -23,13 +23,17 @@ const PaymentForm: React.FC<{
     
     // Calculate previous balances first
     const previousBalances = useMemo(() => {
-        // No balance carry-forward when editing an existing record
+        // No balance carry-forward when editing an existing record, as its bill is already set.
         if (payment) return { rent: 0, utilities: {}, total: 0 };
 
-        const prevMonthDate = new Date(year, month - 2);
+        const prevMonthDate = new Date(year, month - 2, 1);
         const prevYear = prevMonthDate.getFullYear();
         const prevMonth = prevMonthDate.getMonth() + 1;
-        const prevPayment = allPaymentsForProperty.find(p => p.year === prevYear && p.month === prevMonth);
+        
+        const prevPayment = allPaymentsForProperty
+          .filter(p => p.year < year || (p.year === year && p.month < month))
+          .sort((a,b) => b.year - a.year || b.month - a.month)[0];
+
 
         if (!prevPayment) return { rent: 0, utilities: {}, total: 0 };
         
@@ -211,12 +215,12 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
             p.month === paymentData.month
         );
 
-        if (existingPayment && (!('id' in paymentData) || existingPayment.id === paymentData.id)) {
-            updatePayment({ ...existingPayment, ...paymentData });
-        } else if ('id' in paymentData && !existingPayment) {
+        if ('id' in paymentData) {
             updatePayment(paymentData);
+        } else if (existingPayment) {
+            updatePayment({ ...existingPayment, ...paymentData });
         } else {
-            addPayment(paymentData as Omit<Payment, 'id'>);
+            addPayment(paymentData);
         }
 
         setIsModalOpen(false);
@@ -224,7 +228,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     };
     
     const handleDelete = (paymentId: string) => {
-        if (window.confirm("Are you sure you want to delete this payment record? This action cannot be undone.")) {
+        if (window.confirm("Are you sure you want to delete this payment record? This will update the balance for the following month. This action cannot be undone.")) {
             deletePayment(paymentId);
         }
     };

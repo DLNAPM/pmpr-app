@@ -33,7 +33,7 @@ const initialGuestData = {
             month: prevMonth, // Previous month (1-indexed)
             year: prevMonthYear,
             rentBillAmount: 1500,
-            rentPaidAmount: 1500,
+            rentPaidAmount: 1400, // Leave a balance to demonstrate carry-over
             utilities: [
                 { category: 'Water', billAmount: 50, paidAmount: 50 },
                 { category: 'Electricity', billAmount: 85, paidAmount: 85 },
@@ -77,6 +77,44 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// --- CASCADING BALANCE LOGIC ---
+// This is the core logic for intelligent balance forwarding.
+const recalculateNextMonthBalance = async (
+    changedPayment: Payment | { propertyId: string; year: number; month: number },
+    allPayments: Payment[],
+    allProperties: Property[],
+    updateFn: (payment: Payment) => void,
+    isDeletion: boolean = false
+) => {
+    const { propertyId, year, month } = changedPayment;
+    const property = allProperties.find(p => p.id === propertyId);
+    if (!property) return;
+
+    const paymentsForProperty = allPayments
+        .filter(p => p.propertyId === propertyId)
+        .sort((a, b) => a.year - b.year || a.month - b.month);
+
+    const currentIndex = paymentsForProperty.findIndex(p => p.year === year && p.month === month);
+
+    // If we are deleting, the "current" balance comes from the *previous* record.
+    const baseIndex = isDeletion ? currentIndex - 1 : currentIndex;
+    
+    // Find the payment whose balance will be carried forward
+    const balanceSourcePayment = baseIndex >= 0 ? paymentsForProperty[baseIndex] : null;
+    const balanceCarriedForward = balanceSourcePayment ? Math.max(0, balanceSourcePayment.rentBillAmount - balanceSourcePayment.rentPaidAmount) : 0;
+    
+    // Find the next payment to update
+    const nextPaymentIndex = baseIndex + 1;
+    if (nextPaymentIndex < paymentsForProperty.length) {
+        const nextPayment = paymentsForProperty[nextPaymentIndex];
+        const newNextMonthBill = property.rentAmount + balanceCarriedForward;
+        
+        if (nextPayment.rentBillAmount !== newNextMonthBill) {
+            updateFn({ ...nextPayment, rentBillAmount: newNextMonthBill });
+        }
+    }
+};
+
 // This provider handles data for GUEST users using localStorage
 const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const propertiesInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_properties') === null ? initialGuestData.properties : [], []);
@@ -89,7 +127,6 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const [repairs, setRepairs] = useLocalStorage<Repair[]>('pmpr_guest_repairs', repairsInitialValue);
     const [contractors, setContractors] = useLocalStorage<Contractor[]>('pmpr_guest_contractors', contractorsInitialValue);
     
-    // Guest-specific data logic
     const addProperty = (property: Omit<Property, 'id'>) => setProperties(p => [...p, { ...property, id: crypto.randomUUID() }]);
     const updateProperty = (updated: Property) => setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
     const deleteProperty = (id: string) => {
@@ -97,9 +134,44 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         setPayments(p => p.filter(pay => pay.propertyId !== id));
         setRepairs(r => r.filter(rep => rep.propertyId !== id));
     };
-    const addPayment = (payment: Omit<Payment, 'id'>) => setPayments(p => [...p, { ...payment, id: crypto.randomUUID() }]);
-    const updatePayment = (updated: Payment) => setPayments(p => p.map(pay => pay.id === updated.id ? updated : pay));
-    const deletePayment = (id: string) => setPayments(p => p.filter(pay => pay.id !== id));
+    
+    const updatePayment = (updated: Payment) => {
+        setPayments(currentPayments => {
+            const updatedPayments = currentPayments.map(pay => pay.id === updated.id ? updated : pay);
+            recalculateNextMonthBalance(updated, updatedPayments, properties, (p) => {
+                const index = updatedPayments.findIndex(up => up.id === p.id);
+                if (index > -1) updatedPayments[index] = p;
+            });
+            return updatedPayments;
+        });
+    };
+    
+    const addPayment = (payment: Omit<Payment, 'id'>) => {
+        const newPayment = { ...payment, id: crypto.randomUUID() };
+        setPayments(currentPayments => {
+            const updatedPayments = [...currentPayments, newPayment];
+             recalculateNextMonthBalance(newPayment, updatedPayments, properties, (p) => {
+                const index = updatedPayments.findIndex(up => up.id === p.id);
+                if (index > -1) updatedPayments[index] = p;
+            });
+            return updatedPayments;
+        });
+    };
+    
+    const deletePayment = (id: string) => {
+        const paymentToDelete = payments.find(p => p.id === id);
+        if (!paymentToDelete) return;
+
+        setPayments(currentPayments => {
+            const updatedPayments = currentPayments.filter(pay => pay.id !== id);
+            recalculateNextMonthBalance(paymentToDelete, updatedPayments, properties, (p) => {
+                const index = updatedPayments.findIndex(up => up.id === p.id);
+                if (index > -1) updatedPayments[index] = p;
+            }, true); // isDeletion = true
+            return updatedPayments;
+        });
+    };
+
     const addRepair = (repair: Omit<Repair, 'id'>) => setRepairs(r => [...r, { ...repair, id: crypto.randomUUID() }]);
     const updateRepair = (updated: Repair) => setRepairs(r => r.map(rep => rep.id === updated.id ? updated : rep));
     const deleteRepair = (id: string) => setRepairs(r => r.filter(rep => rep.id !== id));
@@ -131,7 +203,6 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
             setIsLoading(false);
             return;
         }
-
         const collections = ['properties', 'payments', 'repairs', 'contractors'];
         const setters = [setProperties, setPayments, setRepairs, setContractors];
         const unsubscribes = collections.map((collectionName, index) => {
@@ -139,17 +210,14 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
                 .where('userId', '==', user.id)
                 .onSnapshot((snapshot: any) => {
                     const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                    setters[index](data as any); // Using 'any' due to varied types
-                    setIsLoading(false); // Set loading to false after first data load
+                    setters[index](data as any);
+                    if (index === collections.length - 1) setIsLoading(false);
                 }, (error: any) => {
                     console.error(`Error fetching ${collectionName}: `, error);
                     setIsLoading(false);
                 });
         });
-
-        // Cleanup function to detach listeners
         return () => unsubscribes.forEach(unsub => unsub());
-
     }, [user.id]);
     
     const addProperty = (property: Omit<Property, 'id'>) => { db.collection('properties').add({ ...property, userId: user.id }); };
@@ -157,28 +225,41 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
     const deleteProperty = async (id: string) => {
         if (!db) return;
         const batch = db.batch();
-
         const paymentsQuery = db.collection('payments').where('propertyId', '==', id);
         const paymentsSnapshot = await paymentsQuery.get();
         paymentsSnapshot.forEach((doc: any) => batch.delete(doc.ref));
-
         const repairsQuery = db.collection('repairs').where('propertyId', '==', id);
         const repairsSnapshot = await repairsQuery.get();
         repairsSnapshot.forEach((doc: any) => batch.delete(doc.ref));
-        
         const propertyRef = db.collection('properties').doc(id);
         batch.delete(propertyRef);
-
-        try {
-            await batch.commit();
-        } catch (e) {
-            console.error("Error deleting property and related data: ", e);
-        }
+        try { await batch.commit(); } catch (e) { console.error("Error deleting property:", e); }
     };
     
-    const addPayment = (payment: Omit<Payment, 'id'>) => { db.collection('payments').add({ ...payment, userId: user.id }); };
-    const updatePayment = (updated: Payment) => { const { id, ...data } = updated; db.collection('payments').doc(id).set(data, { merge: true }); };
-    const deletePayment = (id: string) => { db.collection('payments').doc(id).delete(); };
+    const updatePaymentFirestore = (updated: Payment) => {
+        const { id, ...data } = updated;
+        db.collection('payments').doc(id).set(data, { merge: true });
+    };
+
+    const updatePayment = async (updated: Payment) => {
+        updatePaymentFirestore(updated); // Save the current change
+        recalculateNextMonthBalance(updated, payments, properties, updatePaymentFirestore);
+    };
+
+    const addPayment = (payment: Omit<Payment, 'id'>) => {
+        const newPayment = { ...payment, userId: user.id };
+        db.collection('payments').add(newPayment).then(docRef => {
+            recalculateNextMonthBalance({ ...newPayment, id: docRef.id }, [...payments, { ...newPayment, id: docRef.id }], properties, updatePaymentFirestore);
+        });
+    };
+
+    const deletePayment = async (id: string) => {
+        const paymentToDelete = payments.find(p => p.id === id);
+        if (!paymentToDelete) return;
+        await db.collection('payments').doc(id).delete();
+        recalculateNextMonthBalance(paymentToDelete, payments.filter(p => p.id !== id), properties, updatePaymentFirestore, true);
+    };
+
 
     const addRepair = (repair: Omit<Repair, 'id'>) => { db.collection('repairs').add({ ...repair, userId: user.id }); };
     const updateRepair = (updated: Repair) => { const { id, ...data } = updated; db.collection('repairs').doc(id).set(data, { merge: true }); };
@@ -191,7 +272,6 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
         return { ...newContractor, id: docRef.id };
     };
     const updateContractor = (updated: Contractor) => { const { id, ...data } = updated; db.collection('contractors').doc(id).set(data, { merge: true }); };
-
 
     const value = useMemo(() => ({
         properties, payments, repairs, contractors, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor
@@ -268,26 +348,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return <GuestDataProvider>{children}</GuestDataProvider>;
     }
 
-    // This is the placeholder data provider for when the app is loading or uninitialized.
     const loadingData = {
       properties: [],
       payments: [],
       repairs: [],
       contractors: [],
-      addProperty: () => { console.warn("Data context not ready."); },
-      updateProperty: () => { console.warn("Data context not ready."); },
-      deleteProperty: () => { console.warn("Data context not ready."); },
-      addPayment: () => { console.warn("Data context not ready."); },
-      updatePayment: () => { console.warn("Data context not ready."); },
-      deletePayment: () => { console.warn("Data context not ready."); },
-      addRepair: () => { console.warn("Data context not ready."); },
-      updateRepair: () => { console.warn("Data context not ready."); },
-      deleteRepair: () => { console.warn("Data context not ready."); },
-      addContractor: (c: Omit<Contractor, 'id'>) => {
-        console.warn("Data context not ready.");
-        return { ...c, id: 'loading-id' };
-      },
-      updateContractor: () => { console.warn("Data context not ready."); }
+      addProperty: () => {}, updateProperty: () => {}, deleteProperty: () => {},
+      addPayment: () => {}, updatePayment: () => {}, deletePayment: () => {},
+      addRepair: () => {}, updateRepair: () => {}, deleteRepair: () => {},
+      addContractor: (c: Omit<Contractor, 'id'>) => ({ ...c, id: 'loading-id' }),
+      updateContractor: () => {}
     };
 
     return <AppProviderLogic data={loadingData} isLoading={true}>{children}</AppProviderLogic>;
