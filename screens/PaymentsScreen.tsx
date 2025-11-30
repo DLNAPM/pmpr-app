@@ -1,10 +1,9 @@
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Payment, Property, UtilityPayment } from '../types';
 import Modal from '../components/Modal';
-import { CreditCardIcon, PlusIcon, PencilSquareIcon } from '../components/Icons';
+import { CreditCardIcon, PlusIcon, PencilSquareIcon, TrashIcon } from '../components/Icons';
 import { MONTHS } from '../constants';
 import { EditTarget } from '../App';
 
@@ -21,6 +20,39 @@ const PaymentForm: React.FC<{
     const [year, setYear] = useState(payment?.year || currentYear);
     const [month, setMonth] = useState(payment?.month || currentMonth);
     const [rentPaidAmount, setRentPaidAmount] = useState(payment?.rentPaidAmount || 0);
+    
+    // Calculate previous balances first
+    const previousBalances = useMemo(() => {
+        // No balance carry-forward when editing an existing record
+        if (payment) return { rent: 0, utilities: {}, total: 0 };
+
+        const prevMonthDate = new Date(year, month - 2);
+        const prevYear = prevMonthDate.getFullYear();
+        const prevMonth = prevMonthDate.getMonth() + 1;
+        const prevPayment = allPaymentsForProperty.find(p => p.year === prevYear && p.month === prevMonth);
+
+        if (!prevPayment) return { rent: 0, utilities: {}, total: 0 };
+        
+        const rentBalance = Math.max(0, prevPayment.rentBillAmount - prevPayment.rentPaidAmount);
+        const utilsBalances: { [key: string]: number } = {};
+        prevPayment.utilities.forEach(util => {
+            utilsBalances[util.category] = Math.max(0, util.billAmount - util.paidAmount);
+        });
+        const total = rentBalance + Object.values(utilsBalances).reduce((sum, bal) => sum + bal, 0);
+
+        return { rent: rentBalance, utilities: utilsBalances, total };
+    }, [payment, year, month, allPaymentsForProperty]);
+    
+    const [rentBillAmount, setRentBillAmount] = useState(payment?.rentBillAmount || (property.rentAmount + previousBalances.rent));
+
+    useEffect(() => {
+        // This effect updates the bill amount if the user changes the month/year for a *new* payment
+        if (!payment) {
+            setRentBillAmount(property.rentAmount + previousBalances.rent);
+        }
+    }, [payment, property.rentAmount, previousBalances.rent]);
+
+
     const [utilities, setUtilities] = useState<UtilityPayment[]>(() => {
         if (payment?.utilities) {
             const savedUtils = new Map(payment.utilities.map(u => [u.category, u]));
@@ -32,35 +64,6 @@ const PaymentForm: React.FC<{
     });
     
     const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-
-    const previousBalances = useMemo(() => {
-        // No balance carry-forward when editing an existing record
-        if (payment) return { rent: 0, utilities: {}, total: 0 };
-
-        // Calculate the previous month's year and month (1-12)
-        const prevMonthDate = new Date(year, month - 2); // month is 1-12, so month-2 gives the previous month's index
-        const prevYear = prevMonthDate.getFullYear();
-        const prevMonth = prevMonthDate.getMonth() + 1;
-
-        const prevPayment = allPaymentsForProperty.find(
-            p => p.year === prevYear && p.month === prevMonth
-        );
-
-        if (!prevPayment) {
-            return { rent: 0, utilities: {}, total: 0 };
-        }
-
-        const rentBalance = Math.max(0, prevPayment.rentBillAmount - prevPayment.rentPaidAmount);
-        
-        const utilsBalances: { [key: string]: number } = {};
-        prevPayment.utilities.forEach(util => {
-            utilsBalances[util.category] = Math.max(0, util.billAmount - util.paidAmount);
-        });
-
-        const total = rentBalance + Object.values(utilsBalances).reduce((sum, bal) => sum + bal, 0);
-
-        return { rent: rentBalance, utilities: utilsBalances, total };
-    }, [payment, year, month, allPaymentsForProperty]);
 
     const handleUtilityChange = (index: number, field: keyof UtilityPayment, value: any) => {
         const newUtils = [...utilities];
@@ -74,7 +77,7 @@ const PaymentForm: React.FC<{
             propertyId: property.id,
             year,
             month,
-            rentBillAmount: property.rentAmount,
+            rentBillAmount: rentBillAmount,
             rentPaidAmount,
             utilities,
             paymentDate: rentPaidAmount > 0 || utilities.some(u => u.paidAmount > 0) ? (payment?.paymentDate || new Date().toISOString()) : undefined,
@@ -90,7 +93,7 @@ const PaymentForm: React.FC<{
     return (
          <form onSubmit={handleSubmit} className="space-y-4">
             <h3 className="text-lg font-semibold">{property.name}</h3>
-            {previousBalances.total > 0 && (
+            {previousBalances.total > 0 && !payment && (
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
                     <p className="font-semibold">
                         Total Balance Carried Forward: {formatCurrency(previousBalances.total)}
@@ -112,20 +115,20 @@ const PaymentForm: React.FC<{
 
             <div className="p-3 border rounded-lg space-y-2">
                 <label className="font-medium">Rent</label>
-                {previousBalances.rent > 0 && (
+                {previousBalances.rent > 0 && !payment && (
                     <p className="text-xs text-red-600 font-medium">
                         Previous Balance: {formatCurrency(previousBalances.rent)}
                     </p>
                 )}
                 <div className="grid grid-cols-2 gap-2">
-                    <input type="number" readOnly value={property.rentAmount} className="w-full p-2 border rounded bg-gray-100" />
+                    <input type="number" value={rentBillAmount} onChange={(e) => setRentBillAmount(parseFloat(e.target.value) || 0)} className="w-full p-2 border rounded" />
                     <input type="number" value={rentPaidAmount} onChange={(e) => setRentPaidAmount(parseFloat(e.target.value) || 0)} className="w-full p-2 border rounded" />
                 </div>
             </div>
             {utilities.map((util, index) => (
                 <div key={util.category} className="p-3 border rounded-lg space-y-2">
                      <label className="font-medium">{util.category}</label>
-                     {previousBalances.utilities[util.category] > 0 && (
+                     {previousBalances.utilities[util.category] > 0 && !payment && (
                         <p className="text-xs text-red-600 font-medium">
                             Previous Balance: {formatCurrency(previousBalances.utilities[util.category])}
                         </p>
@@ -153,7 +156,7 @@ interface PaymentsScreenProps {
 }
 
 const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onActionDone }) => {
-    const { properties, payments, getPaymentsForProperty, addPayment, updatePayment } = useAppContext();
+    const { properties, payments, getPaymentsForProperty, addPayment, updatePayment, deletePayment } = useAppContext();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>(undefined);
@@ -202,26 +205,28 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a,b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
 
     const handleSavePayment = (paymentData: Omit<Payment, 'id'> | Payment) => {
-        // This is a robust "upsert" logic. It finds an existing payment based on
-        // the unique combination of property, year, and month.
         const existingPayment = payments.find(p =>
             p.propertyId === paymentData.propertyId &&
             p.year === paymentData.year &&
             p.month === paymentData.month
         );
 
-        if (existingPayment) {
-            // If a record for this month already exists, we update it.
-            // We combine the existing record's data (like its ID) with the new form data.
+        if (existingPayment && (!('id' in paymentData) || existingPayment.id === paymentData.id)) {
             updatePayment({ ...existingPayment, ...paymentData });
+        } else if ('id' in paymentData && !existingPayment) {
+            updatePayment(paymentData);
         } else {
-            // If no record for this month exists, it's a new payment.
-            // We cast to remove 'id' if it exists, as addPayment expects no id.
             addPayment(paymentData as Omit<Payment, 'id'>);
         }
 
         setIsModalOpen(false);
         setSelectedPayment(undefined);
+    };
+    
+    const handleDelete = (paymentId: string) => {
+        if (window.confirm("Are you sure you want to delete this payment record? This action cannot be undone.")) {
+            deletePayment(paymentId);
+        }
     };
 
 
@@ -258,13 +263,22 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                             <Card key={payment.id}>
                                 <CardHeader className="flex justify-between items-center">
                                     <h3 className="font-bold text-lg">{MONTHS[payment.month - 1]} {payment.year}</h3>
-                                    <button 
-                                        onClick={() => openEditModal(payment)}
-                                        className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors"
-                                        aria-label="Edit Payment"
-                                    >
-                                        <PencilSquareIcon className="w-5 h-5"/>
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => openEditModal(payment)}
+                                            className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors"
+                                            aria-label="Edit Payment"
+                                        >
+                                            <PencilSquareIcon className="w-5 h-5"/>
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDelete(payment.id)}
+                                            className="text-gray-400 hover:text-red-600 p-1 rounded-full transition-colors"
+                                            aria-label="Delete Payment"
+                                        >
+                                            <TrashIcon className="w-5 h-5"/>
+                                        </button>
+                                    </div>
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className={`p-3 rounded-lg ${rentStatus.color}`}>
