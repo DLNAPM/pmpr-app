@@ -23,13 +23,6 @@ const PaymentForm: React.FC<{
     
     // Calculate previous balances first
     const previousBalances = useMemo(() => {
-        // No balance carry-forward when editing an existing record, as its bill is already set.
-        if (payment) return { rent: 0, utilities: {}, total: 0 };
-
-        const prevMonthDate = new Date(year, month - 2, 1);
-        const prevYear = prevMonthDate.getFullYear();
-        const prevMonth = prevMonthDate.getMonth() + 1;
-        
         const prevPayment = allPaymentsForProperty
           .filter(p => p.year < year || (p.year === year && p.month < month))
           .sort((a,b) => b.year - a.year || b.month - a.month)[0];
@@ -45,7 +38,7 @@ const PaymentForm: React.FC<{
         const total = rentBalance + Object.values(utilsBalances).reduce((sum, bal) => sum + bal, 0);
 
         return { rent: rentBalance, utilities: utilsBalances, total };
-    }, [payment, year, month, allPaymentsForProperty]);
+    }, [year, month, allPaymentsForProperty]);
     
     const [rentBillAmount, setRentBillAmount] = useState(payment?.rentBillAmount || (property.rentAmount + previousBalances.rent));
 
@@ -97,7 +90,7 @@ const PaymentForm: React.FC<{
     return (
          <form onSubmit={handleSubmit} className="space-y-4">
             <h3 className="text-lg font-semibold">{property.name}</h3>
-            {previousBalances.total > 0 && !payment && (
+            {previousBalances.total > 0 && (
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
                     <p className="font-semibold">
                         Total Balance Carried Forward: {formatCurrency(previousBalances.total)}
@@ -119,7 +112,7 @@ const PaymentForm: React.FC<{
 
             <div className="p-3 border rounded-lg space-y-2">
                 <label className="font-medium">Rent</label>
-                {previousBalances.rent > 0 && !payment && (
+                {previousBalances.rent > 0 && (
                     <p className="text-xs text-red-600 font-medium">
                         Previous Balance: {formatCurrency(previousBalances.rent)}
                     </p>
@@ -132,7 +125,7 @@ const PaymentForm: React.FC<{
             {utilities.map((util, index) => (
                 <div key={util.category} className="p-3 border rounded-lg space-y-2">
                      <label className="font-medium">{util.category}</label>
-                     {previousBalances.utilities[util.category] > 0 && !payment && (
+                     {previousBalances.utilities[util.category] > 0 && (
                         <p className="text-xs text-red-600 font-medium">
                             Previous Balance: {formatCurrency(previousBalances.utilities[util.category])}
                         </p>
