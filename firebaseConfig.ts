@@ -38,6 +38,7 @@ export const isFirebaseConfigured = hasApiKeys && isFirebaseLoaded;
 
 let authService = null;
 let dbService = null;
+let storageService = null;
 
 if (isFirebaseLoaded) {
     if (hasApiKeys) {
@@ -46,6 +47,7 @@ if (isFirebaseLoaded) {
               firebase.initializeApp(firebaseConfig);
               authService = firebase.auth();
               dbService = firebase.firestore();
+              storageService = firebase.storage();
             } catch (e) {
               console.error("Firebase initialization failed. Please check your configuration.", e);
               // Clear bad config from storage to prevent loops
@@ -54,6 +56,7 @@ if (isFirebaseLoaded) {
         } else {
            authService = firebase.auth();
            dbService = firebase.firestore();
+           storageService = firebase.storage();
         }
     }
 }
@@ -74,3 +77,4 @@ if (isFirebaseConfigured) {
 
 export const auth = authService;
 export const db = dbService;
+export const storage = storageService;

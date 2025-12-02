@@ -18,6 +18,12 @@ export interface UtilityPayment {
   paidAmount: number;
 }
 
+export interface BillImage {
+  name: string;
+  url: string; // For Firebase, this is downloadURL. For guest, this is a Base64 string.
+  path?: string; // Full path in Firebase Storage, used for deletion.
+}
+
 export interface Payment {
   id: string;
   propertyId: string;
@@ -27,6 +33,7 @@ export interface Payment {
   rentPaidAmount: number;
   utilities: UtilityPayment[];
   notes?: string; // Add notes field
+  billImages?: BillImage[];
   paymentDate?: string; // ISO string for when the last payment part was made
   userId?: string;
 }

@@ -196,7 +196,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     };
 
     const handleReconcile = () => {
-        // Fix: Correctly type the initial value for the `reduce` method. Without this,
+        // FIX: Correctly type the initial value for the `reduce` method. Without this,
         // TypeScript infers the result as `{}`, causing `Object.values` to return `unknown[]`
         // and leading to subsequent errors on properties like `.length`.
         const paymentGroups = payments.reduce((acc, p) => {

@@ -1,8 +1,17 @@
 import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
-import { Property, Payment, Repair, RepairStatus, Contractor } from '../types';
+import { Property, Payment, Repair, RepairStatus, Contractor, BillImage } from '../types';
 import { useAuth, User } from './AuthContext';
-import { db, isFirebaseConfigured } from '../firebaseConfig';
+import { db, storage, isFirebaseConfigured } from '../firebaseConfig';
+
+// --- Helper for guest image handling ---
+const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
+});
+
 
 // --- Create more robust initial data for the previous month ---
 const now = new Date();
@@ -60,8 +69,8 @@ interface AppContextType {
   addProperty: (property: Omit<Property, 'id'>) => void;
   updateProperty: (updatedProperty: Property) => void;
   deleteProperty: (propertyId: string) => void;
-  addPayment: (payment: Omit<Payment, 'id'>) => void;
-  updatePayment: (updatedPayment: Payment) => void;
+  addPayment: (payment: Omit<Payment, 'id'>, images: File[]) => Promise<void>;
+  updatePayment: (updatedPayment: Payment, newImages: File[], imagesToRemove: BillImage[]) => Promise<void>;
   deletePayment: (paymentId: string) => void;
   addRepair: (repair: Omit<Repair, 'id'>) => void;
   updateRepair: (updatedRepair: Repair) => void;
@@ -93,7 +102,7 @@ const recalculateNextMonthBalance = async (
 
     const paymentsForProperty = allPayments
         .filter(p => p.propertyId === propertyId)
-        .sort((a, b) => a.year - b.year || a.month - b.month);
+        .sort((a, b) => a.year - b.year || a.month - a.month);
 
     const currentIndex = paymentsForProperty.findIndex(p => p.year === year && p.month === month);
 
@@ -136,7 +145,13 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         setRepairs(r => r.filter(rep => rep.propertyId !== id));
     };
     
-    const updatePayment = (updated: Payment) => {
+    const updatePayment = async (updated: Payment, newImages: File[], imagesToRemove: BillImage[]) => {
+        const imageUploadPromises = newImages.map(file => fileToBase64(file).then(base64 => ({ name: file.name, url: base64 })));
+        const uploadedImages = await Promise.all(imageUploadPromises);
+        
+        const remainingImages = (updated.billImages || []).filter(img => !imagesToRemove.some(rem => rem.url === img.url));
+        updated.billImages = [...remainingImages, ...uploadedImages];
+        
         setPayments(currentPayments => {
             const updatedPayments = currentPayments.map(pay => pay.id === updated.id ? updated : pay);
             recalculateNextMonthBalance(updated, updatedPayments, properties, (p) => {
@@ -147,8 +162,12 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         });
     };
     
-    const addPayment = (payment: Omit<Payment, 'id'>) => {
-        const newPayment = { ...payment, id: crypto.randomUUID() };
+    const addPayment = async (payment: Omit<Payment, 'id'>, images: File[]) => {
+        const imageUploadPromises = images.map(file => fileToBase64(file).then(base64 => ({ name: file.name, url: base64 })));
+        const uploadedImages = await Promise.all(imageUploadPromises);
+        
+        const newPayment = { ...payment, id: crypto.randomUUID(), billImages: uploadedImages };
+
         setPayments(currentPayments => {
             const updatedPayments = [...currentPayments, newPayment];
              recalculateNextMonthBalance(newPayment, updatedPayments, properties, (p) => {
@@ -225,6 +244,18 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
     const updateProperty = (updated: Property) => { const { id, ...data } = updated; db.collection('properties').doc(id).set(data, { merge: true }); };
     const deleteProperty = async (id: string) => {
         if (!db) return;
+        // Also delete images from storage
+        const paymentsToDelete = payments.filter(p => p.propertyId === id);
+        for (const payment of paymentsToDelete) {
+            if (payment.billImages) {
+                for (const image of payment.billImages) {
+                    if (image.path && storage) {
+                        await storage.ref(image.path).delete();
+                    }
+                }
+            }
+        }
+        
         const batch = db.batch();
         const paymentsQuery = db.collection('payments').where('propertyId', '==', id);
         const paymentsSnapshot = await paymentsQuery.get();
@@ -236,27 +267,57 @@ const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNod
         batch.delete(propertyRef);
         try { await batch.commit(); } catch (e) { console.error("Error deleting property:", e); }
     };
+
+    const uploadImage = async (paymentId: string, file: File): Promise<BillImage> => {
+        const filePath = `bill_images/${user.id}/${paymentId}/${crypto.randomUUID()}-${file.name}`;
+        const fileRef = storage.ref(filePath);
+        await fileRef.put(file);
+        const url = await fileRef.getDownloadURL();
+        return { name: file.name, url, path: filePath };
+    };
     
     const updatePaymentFirestore = (updated: Payment) => {
         const { id, ...data } = updated;
         db.collection('payments').doc(id).set(data, { merge: true });
     };
 
-    const updatePayment = async (updated: Payment) => {
-        updatePaymentFirestore(updated); // Save the current change
+    const updatePayment = async (updated: Payment, newImages: File[], imagesToRemove: BillImage[]) => {
+        // Delete images from storage first
+        const deletePromises = imagesToRemove.map(img => img.path && storage.ref(img.path).delete());
+        await Promise.all(deletePromises);
+
+        // Upload new images
+        const uploadPromises = newImages.map(file => uploadImage(updated.id, file));
+        const uploadedImages = await Promise.all(uploadPromises);
+
+        const remainingImages = (updated.billImages || []).filter(img => !imagesToRemove.some(rem => rem.url === img.url));
+        updated.billImages = [...remainingImages, ...uploadedImages];
+        
+        updatePaymentFirestore(updated);
         recalculateNextMonthBalance(updated, payments, properties, updatePaymentFirestore);
     };
 
-    const addPayment = (payment: Omit<Payment, 'id'>) => {
-        const newPayment = { ...payment, userId: user.id };
-        db.collection('payments').add(newPayment).then(docRef => {
-            recalculateNextMonthBalance({ ...newPayment, id: docRef.id }, [...payments, { ...newPayment, id: docRef.id }], properties, updatePaymentFirestore);
-        });
+    const addPayment = async (payment: Omit<Payment, 'id'>, images: File[]) => {
+        const newPaymentData = { ...payment, userId: user.id, billImages: [] };
+        const docRef = await db.collection('payments').add(newPaymentData);
+        
+        const uploadPromises = images.map(file => uploadImage(docRef.id, file));
+        const uploadedImages = await Promise.all(uploadPromises);
+        
+        const finalPayment = { ...newPaymentData, id: docRef.id, billImages: uploadedImages };
+        updatePaymentFirestore(finalPayment);
+        recalculateNextMonthBalance(finalPayment, [...payments, finalPayment], properties, updatePaymentFirestore);
     };
 
     const deletePayment = async (id: string) => {
         const paymentToDelete = payments.find(p => p.id === id);
         if (!paymentToDelete) return;
+        
+        if (paymentToDelete.billImages) {
+            const deletePromises = paymentToDelete.billImages.map(img => img.path && storage.ref(img.path).delete());
+            await Promise.all(deletePromises);
+        }
+
         await db.collection('payments').doc(id).delete();
         recalculateNextMonthBalance(paymentToDelete, payments.filter(p => p.id !== id), properties, updatePaymentFirestore, true);
     };
@@ -355,7 +416,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       repairs: [],
       contractors: [],
       addProperty: () => {}, updateProperty: () => {}, deleteProperty: () => {},
-      addPayment: () => {}, updatePayment: () => {}, deletePayment: () => {},
+      addPayment: async () => {}, updatePayment: async () => {}, deletePayment: () => {},
       addRepair: () => {}, updateRepair: () => {}, deleteRepair: () => {},
       addContractor: (c: Omit<Contractor, 'id'>) => ({ ...c, id: 'loading-id' }),
       updateContractor: () => {}
