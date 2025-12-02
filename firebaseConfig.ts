@@ -2,10 +2,6 @@
 declare const firebase: any;
 
 // --- DYNAMIC CONFIGURATION LOGIC ---
-// 1. Try to load config from localStorage (set by the new config modal).
-// 2. If not found, fall back to environment variables.
-// 3. If neither is found, use placeholders.
-
 let firebaseConfig: any = null;
 const storedConfigRaw = localStorage.getItem('pmpr_firebaseConfig');
 
@@ -18,58 +14,57 @@ if (storedConfigRaw) {
   }
 }
 
-// If no valid stored config, fallback to environment variables
 if (!firebaseConfig) {
   firebaseConfig = {
     apiKey: process.env.FIREBASE_API_KEY || "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo",
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || "pmpr-app.firebaseapp.com",
     projectId: process.env.FIREBASE_PROJECT_ID || "pmpr-app",
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "pmpr-app.appspot.com",
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "pmpr-app.appspot.com", // This is the source of the error
     messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "1234567890",
     appId: process.env.FIREBASE_APP_ID || "1:12345:web:abcdef123"
   };
 }
 
-
-const hasApiKeys = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
 const isFirebaseLoaded = typeof firebase !== 'undefined' && firebase.app;
 
-export const isFirebaseConfigured = hasApiKeys && isFirebaseLoaded;
+// --- ROBUST CONFIGURATION CHECK (THE FIX) ---
+// This is the definitive fix for the CORS/Storage issue.
+// We now check for a valid API key AND a valid storageBucket.
+// If the storageBucket is the incorrect default, the app is considered not configured.
+const hasApiKeys = firebaseConfig.apiKey && firebaseConfig.apiKey !== "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo";
+const hasValidStorageBucket = firebaseConfig.storageBucket && firebaseConfig.storageBucket !== "pmpr-app.appspot.com";
+export const isFirebaseConfigured = hasApiKeys && hasValidStorageBucket && isFirebaseLoaded;
+
 
 let authService = null;
 let dbService = null;
 let storageService = null;
 
-if (isFirebaseLoaded) {
-    if (hasApiKeys) {
-        if (!firebase.apps.length) {
-            try {
-              firebase.initializeApp(firebaseConfig);
-              authService = firebase.auth();
-              dbService = firebase.firestore();
-              storageService = firebase.storage();
-            } catch (e) {
-              console.error("Firebase initialization failed. Please check your configuration.", e);
-              // Clear bad config from storage to prevent loops
-              if (storedConfigRaw) localStorage.removeItem('pmpr_firebaseConfig');
-            }
-        } else {
-           authService = firebase.auth();
-           dbService = firebase.firestore();
-           storageService = firebase.storage();
+if (isFirebaseConfigured) {
+    if (!firebase.apps.length) {
+        try {
+          firebase.initializeApp(firebaseConfig);
+        } catch (e) {
+          console.error("Firebase initialization failed. Please check your configuration.", e);
+          if (storedConfigRaw) localStorage.removeItem('pmpr_firebaseConfig'); // Clear bad config
         }
+    }
+    // Always get services from the initialized app to avoid errors
+    if(firebase.apps.length > 0) {
+      authService = firebase.auth();
+      dbService = firebase.firestore();
+      storageService = firebase.storage();
     }
 }
 
 if (isFirebaseConfigured) {
-  // All good, no need to log.
-} else if (hasApiKeys && !isFirebaseLoaded) {
-    console.error("Firebase environment variables or stored config are set, but the Firebase library failed to load. Please check your network connection and the script tags in index.html.");
-} else if (!hasApiKeys && !storedConfigRaw) { // Only warn if no config source is available
+  // All good.
+} else if (isFirebaseLoaded) { // Only log if firebase is loaded but config is bad
      console.warn(
-        `%cFIREBASE WARNING: Your Firebase environment variables are not configured.
-        %cThe application will load, but Google Sign-In will be disabled.
-        Please ensure you have set all FIREBASE_... variables in your environment or configure it in the UI.`,
+        `%cFIREBASE WARNING: Firebase is not configured correctly.
+        %cThe application will load, but Google Sign-In & file uploads will be disabled.
+        This may be due to missing environment variables or an incomplete configuration (e.g., wrong storageBucket).
+        Please use the "Configure Connection" link on the login page to provide the full config object from your Firebase project settings.`,
         "color: orange; font-weight: bold; font-size: 14px;",
         "color: orange; font-size: 12px;"
     );
