@@ -26,6 +26,7 @@ export interface Payment {
   rentBillAmount: number;
   rentPaidAmount: number;
   utilities: UtilityPayment[];
+  notes?: string; // Add notes field
   paymentDate?: string; // ISO string for when the last payment part was made
   userId?: string;
 }

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import Card, { CardContent, CardHeader } from '../components/Card';
+import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Payment, Property, UtilityPayment } from '../types';
 import Modal from '../components/Modal';
@@ -20,6 +20,7 @@ const PaymentForm: React.FC<{
     const [year, setYear] = useState(payment?.year || currentYear);
     const [month, setMonth] = useState(payment?.month || currentMonth);
     const [rentPaidAmount, setRentPaidAmount] = useState(payment?.rentPaidAmount || 0);
+    const [notes, setNotes] = useState(payment?.notes || '');
     
     // Calculate previous balances first
     const previousBalances = useMemo(() => {
@@ -77,6 +78,7 @@ const PaymentForm: React.FC<{
             rentBillAmount: rentBillAmount,
             rentPaidAmount,
             utilities,
+            notes,
             paymentDate: rentPaidAmount > 0 || utilities.some(u => u.paidAmount > 0) ? (payment?.paymentDate || new Date().toISOString()) : undefined,
         };
         
@@ -136,7 +138,19 @@ const PaymentForm: React.FC<{
                     </div>
                 </div>
             ))}
-            <div className="flex justify-end gap-2 pt-4">
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
+              <textarea
+                id="notes"
+                name="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                className="w-full p-2 border rounded mt-1"
+                placeholder="e.g., Paid via check #1234 on 10/15..."
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">
                     {payment ? 'Save Changes' : 'Record Payment'}
@@ -299,6 +313,11 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                                          {payment.utilities.length === 0 && <p className="text-xs text-gray-500">No utilities tracked for this property.</p>}
                                     </div>
                                 </CardContent>
+                                {payment.notes && (
+                                    <CardFooter>
+                                        <p className="text-sm text-gray-600 italic"><span className="font-semibold not-italic">Notes:</span> {payment.notes}</p>
+                                    </CardFooter>
+                                )}
                             </Card>
                         )
                     })}

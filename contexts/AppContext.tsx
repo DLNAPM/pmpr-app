@@ -39,6 +39,7 @@ const initialGuestData = {
                 { category: 'Electricity', billAmount: 85, paidAmount: 85 },
                 { category: 'Internet', billAmount: 60, paidAmount: 0 },
             ],
+            notes: 'Paid via check #123. Tenant will pay remaining internet bill next month.',
             paymentDate: prevMonthDate.toISOString()
         }
     ],
