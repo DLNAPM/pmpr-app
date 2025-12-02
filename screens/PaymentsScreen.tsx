@@ -315,7 +315,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                                 </CardContent>
                                 {payment.notes && (
                                     <CardFooter>
-                                        <p className="text-sm text-gray-600 italic"><span className="font-semibold not-italic">Notes:</span> {payment.notes}</p>
+                                        <p className="text-sm text-gray-600 italic whitespace-pre-wrap"><span className="font-semibold not-italic">Notes:</span> {payment.notes}</p>
                                     </CardFooter>
                                 )}
                             </Card>

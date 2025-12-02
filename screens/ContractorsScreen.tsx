@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import Card, { CardContent } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
@@ -214,7 +213,7 @@ const ContractorsScreen: React.FC = () => {
                                     <p className="text-gray-600 text-sm">{c.contact}</p>
                                     {c.email && <p className="text-gray-600 text-sm">{c.email}</p>}
                                     {c.companyAddress && <p className="text-gray-600 text-sm">{c.companyAddress}</p>}
-                                    {c.comments && <p className="text-sm text-gray-500 italic mt-2 p-2 bg-slate-50 rounded-md">{c.comments}</p>}
+                                    {c.comments && <p className="text-sm text-gray-500 italic mt-2 p-2 bg-slate-50 rounded-md whitespace-pre-wrap">{c.comments}</p>}
                                 </div>
                                 <button 
                                     onClick={() => openEditModal(c)}

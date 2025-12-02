@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import Card, { CardContent, CardHeader } from '../components/Card';
+import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Repair, RepairStatus, Contractor } from '../types';
 import { PlusIcon, WrenchScrewdriverIcon } from '../components/Icons';
@@ -244,6 +243,11 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
                                 </div>
                             </div>
                         </CardContent>
+                        {repair.notes && (
+                            <CardFooter>
+                                <p className="text-sm text-gray-600 italic whitespace-pre-wrap"><span className="font-semibold not-italic">Notes:</span> {repair.notes}</p>
+                            </CardFooter>
+                        )}
                     </Card>
                 ))}
                 {repairs.length === 0 && (
