@@ -19,7 +19,7 @@ if (!firebaseConfig) {
     apiKey: process.env.FIREBASE_API_KEY || "AIzaSyC9JYl3h9Rry4oLQ-bY7j7s7U8HfFKFsJo",
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || "pmpr-app.firebaseapp.com",
     projectId: process.env.FIREBASE_PROJECT_ID || "pmpr-app",
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "pmpr-app.appspot.com", // This is the source of the error
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "pmpr-app.firebasestorage.app", // This is the source of the error
     messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "1234567890",
     appId: process.env.FIREBASE_APP_ID || "1:12345:web:abcdef123"
   };
