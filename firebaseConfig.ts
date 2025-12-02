@@ -20,8 +20,8 @@ if (!firebaseConfig) {
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || "pmpr-app.firebaseapp.com",
     projectId: process.env.FIREBASE_PROJECT_ID || "pmpr-app",
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "pmpr-app.firebasestorage.app", // This is the source of the error
-    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "1234567890",
-    appId: process.env.FIREBASE_APP_ID || "1:12345:web:abcdef123"
+    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "608205035568",
+    appId: process.env.FIREBASE_APP_ID || "1:608205035568:web:5aa7530b75be8301bbf5f5"
   };
 }
 
