@@ -164,7 +164,7 @@ const PaymentForm: React.FC<{
                     </div>
                 </div>
             ))}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
                   <textarea
@@ -369,7 +369,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                                 </CardContent>
                                 {(payment.notes || (payment.billImages && payment.billImages.length > 0)) && (
                                     <CardFooter className="space-y-3">
-                                        {payment.notes && <p className="text-sm text-gray-600 italic whitespace-pre-wrap"><span className="font-semibold not-italic">Notes:</span> {payment.notes}</p>}
+                                        {payment.notes && <p className="text-sm text-gray-600 italic"><span className="font-semibold not-italic">Notes:</span> {payment.notes}</p>}
                                         {payment.billImages && payment.billImages.length > 0 && (
                                             <div>
                                                 <p className="text-sm font-semibold text-gray-700 mb-2">Attached Bills:</p>

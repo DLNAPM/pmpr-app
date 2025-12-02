@@ -188,17 +188,17 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         });
         paymentsToUpdate.forEach(payment => {
             const existingPayment = payments.find(p => p.propertyId === payment.propertyId && p.year === payment.year && p.month === payment.month);
-            if (existingPayment) { updatePayment({ ...existingPayment, ...payment }); }
-            else { addPayment(payment); }
+            if (existingPayment) { updatePayment({ ...existingPayment, ...payment }, [], []); }
+            else { addPayment(payment, []); }
         });
         alert(`${importPreview.validRecords.length} records imported successfully.`);
         setIsImportModalOpen(false); setImportPreview(null);
     };
 
     const handleReconcile = () => {
-        // FIX: Correctly type the initial value for the `reduce` method. Without this,
-        // TypeScript infers the result as `{}`, causing `Object.values` to return `unknown[]`
-        // and leading to subsequent errors on properties like `.length`.
+        // FIX: Correctly type the initial value for the `reduce` method.
+        // Without this, TypeScript infers the result as `{}`, causing `Object.values`
+        // to return `unknown[]` and leading to subsequent errors.
         const paymentGroups = payments.reduce((acc, p) => {
             const key = `${p.propertyId}-${p.year}-${p.month}`;
             if (!acc[key]) acc[key] = [];
