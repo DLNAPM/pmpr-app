@@ -6,6 +6,7 @@ import { useAppContext } from '../contexts/AppContext';
 import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon, CurrencyDollarIcon, ArrowTopRightOnSquareIcon } from '../components/Icons';
 import { RepairStatus } from '../types';
 import { ReportFilter } from '../App';
+import { MONTHS } from '../constants';
 
 interface DashboardScreenProps {
   onAction: (tab: 'properties' | 'payments' | 'repairs' | 'reporting' | 'contractors', action?: string) => void;
@@ -61,7 +62,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
     const monthlySummary = useMemo(() => {
         let totalCollected = 0;
         let totalBilled = 0;
-        let categoryBreakdown: { [key: string]: { paid: number, total: number } } = {};
 
         const now = new Date();
         const currentMonth = now.getMonth() + 1;
@@ -70,24 +70,52 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
         payments.filter(p => p.year === currentYear && p.month === currentMonth).forEach(p => {
             totalCollected += p.rentPaidAmount;
             totalBilled += p.rentBillAmount;
-            
-            if (!categoryBreakdown['Rent']) categoryBreakdown['Rent'] = { paid: 0, total: 0 };
-            categoryBreakdown['Rent'].paid += p.rentPaidAmount;
-            categoryBreakdown['Rent'].total += p.rentBillAmount;
-
             p.utilities.forEach(u => {
                 totalCollected += u.paidAmount;
                 totalBilled += u.billAmount;
-
-                if (!categoryBreakdown[u.category]) categoryBreakdown[u.category] = { paid: 0, total: 0 };
-                categoryBreakdown[u.category].paid += u.paidAmount;
-                categoryBreakdown[u.category].total += u.billAmount;
             });
         });
 
         const overallCollectionRate = totalBilled > 0 ? (totalCollected / totalBilled) * 100 : 100;
 
-        return { overallCollectionRate, categoryBreakdown };
+        return { overallCollectionRate };
+    }, [payments]);
+    
+    // New breakdown for the last 6 months
+    const paymentBreakdownSummary = useMemo(() => {
+        const monthsData = [];
+        const now = new Date();
+
+        for (let i = 0; i < 6; i++) {
+            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            const monthName = MONTHS[month - 1];
+
+            const paymentsForMonth = payments.filter(p => p.year === year && p.month === month);
+
+            const categoryBreakdown: { [key: string]: { paid: number, total: number } } = {};
+
+            paymentsForMonth.forEach(p => {
+                if (!categoryBreakdown['Rent']) categoryBreakdown['Rent'] = { paid: 0, total: 0 };
+                categoryBreakdown['Rent'].paid += p.rentPaidAmount;
+                categoryBreakdown['Rent'].total += p.rentBillAmount;
+
+                p.utilities.forEach(u => {
+                    if (!categoryBreakdown[u.category]) categoryBreakdown[u.category] = { paid: 0, total: 0 };
+                    categoryBreakdown[u.category].paid += u.paidAmount;
+                    categoryBreakdown[u.category].total += u.billAmount;
+                });
+            });
+
+            monthsData.push({
+                label: `${monthName} ${year}`,
+                categoryBreakdown,
+                hasData: paymentsForMonth.length > 0
+            });
+        }
+
+        return monthsData;
     }, [payments]);
 
     const repairSummary = useMemo(() => {
@@ -168,23 +196,35 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
                     </CardContent>
                 </Card>
 
-                {/* Payment Breakdown (This Month) */}
+                {/* Payment Breakdown (Last 6 Months) */}
                 <Card>
-                    <CardHeader><h3 className="font-semibold text-lg">Payment Breakdown (This Month)</h3></CardHeader>
-                    <CardContent className="space-y-4">
-                        {Object.entries(monthlySummary.categoryBreakdown).map(([category, data]) => {
-                            const typedData = data as { paid: number, total: number };
-                            return (
-                                <div key={category}>
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className="font-medium">{category}</span>
-                                        <span className="text-sm text-gray-600">{formatCurrency(typedData.paid)} / {formatCurrency(typedData.total)}</span>
+                    <CardHeader><h3 className="font-semibold text-lg">Monthly Payment Breakdown</h3></CardHeader>
+                    <CardContent className="space-y-6">
+                        {paymentBreakdownSummary.map(monthData => (
+                            <div key={monthData.label}>
+                                <h4 className="font-semibold text-md text-gray-700 mb-3">{monthData.label}</h4>
+                                {monthData.hasData ? (
+                                    <div className="space-y-4 pl-3 border-l-2 border-slate-200">
+                                        {/* FIX: Replaced Object.entries with Object.keys to ensure correct type inference for `data`. */}
+                                        {Object.keys(monthData.categoryBreakdown).map(category => {
+                                            const data = monthData.categoryBreakdown[category];
+                                            return (
+                                                <div key={category}>
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <span className="font-medium">{category}</span>
+                                                        <span className="text-sm text-gray-600">{formatCurrency(data.paid)} / {formatCurrency(data.total)}</span>
+                                                    </div>
+                                                    <ProgressBar value={data.total > 0 ? (data.paid / data.total) * 100 : 0} />
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <ProgressBar value={typedData.total > 0 ? (typedData.paid / typedData.total) * 100 : 0} />
-                                </div>
-                            );
-                        })}
-                         {Object.keys(monthlySummary.categoryBreakdown).length === 0 && <p className="text-gray-500 text-center py-4">No payments recorded for the current month.</p>}
+                                ) : (
+                                    <p className="text-gray-500 text-sm pl-3 border-l-2 border-slate-200">No payments recorded for this month.</p>
+                                )}
+                            </div>
+                        ))}
+                         {paymentBreakdownSummary.every(m => !m.hasData) && <p className="text-gray-500 text-center py-4">No payments recorded in the last 6 months.</p>}
                     </CardContent>
                 </Card>
             </div>

@@ -199,14 +199,14 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         // Fix: Correctly type the initial value for the `reduce` method. Without this,
         // TypeScript infers the result as `{}`, causing `Object.values` to return `unknown[]`
         // and leading to subsequent errors on properties like `.length`.
-        const paymentGroups = payments.reduce((acc: Record<string, Payment[]>, p) => {
+        const paymentGroups = payments.reduce((acc, p) => {
             const key = `${p.propertyId}-${p.year}-${p.month}`;
             if (!acc[key]) acc[key] = [];
             acc[key].push(p);
             return acc;
         }, {} as Record<string, Payment[]>);
 
-        const repairGroups = repairs.reduce((acc: Record<string, Repair[]>, r) => {
+        const repairGroups = repairs.reduce((acc, r) => {
             const key = `${r.propertyId}-${r.description}-${r.cost}`;
             if (!acc[key]) acc[key] = [];
             acc[key].push(r);
