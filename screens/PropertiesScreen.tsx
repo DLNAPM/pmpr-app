@@ -158,10 +158,11 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {properties.map(prop => (
-                    <Card key={prop.id}>
+                    // FIX: Moved onClick to the parent Card component to make the whole card clickable and fix the error on CardContent.
+                    <Card key={prop.id} onClick={() => openEditModal(prop)}>
                         <CardHeader className="flex justify-between items-start">
-                            <div className="flex-1 pr-2" onClick={() => openEditModal(prop)}>
-                                <h3 className="font-bold text-lg text-blue-800 cursor-pointer">{prop.name}</h3>
+                            <div className="flex-1 pr-2">
+                                <h3 className="font-bold text-lg text-blue-800">{prop.name}</h3>
                                 <a
                                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(prop.address)}`}
                                   target="_blank"
@@ -190,7 +191,7 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                 </button>
                             </div>
                         </CardHeader>
-                         <CardContent onClick={() => openEditModal(prop)} className="cursor-pointer">
+                         <CardContent>
                             {prop.tenants.map(tenant => (
                                 <div key={tenant.id} className="flex items-center gap-3">
                                     <UserIcon className="w-5 h-5 text-gray-400" />

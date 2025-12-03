@@ -3,9 +3,12 @@ import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Payment, Property, UtilityPayment } from '../types';
 import Modal from '../components/Modal';
-import { CreditCardIcon, PlusIcon, PencilSquareIcon, TrashIcon } from '../components/Icons';
+import { CreditCardIcon, PlusIcon, PencilSquareIcon, TrashIcon, ArrowDownTrayIcon } from '../components/Icons';
 import { MONTHS } from '../constants';
 import { EditTarget } from '../App';
+
+// Make jsPDF available from the global scope
+declare const jspdf: any;
 
 const PaymentForm: React.FC<{
     property: Property;
@@ -43,6 +46,7 @@ const PaymentForm: React.FC<{
     const [rentBillAmount, setRentBillAmount] = useState(payment?.rentBillAmount || (property.rentAmount + previousBalances.rent));
 
     useEffect(() => {
+        // Only auto-update bill amount for NEW payments when month/year changes
         if (!payment) {
             setRentBillAmount(property.rentAmount + previousBalances.rent);
         }
@@ -241,6 +245,90 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
         }
     };
 
+    const handleExportPdf = () => {
+        if (!selectedProperty || propertyPayments.length === 0) {
+            alert("No payments to export for this property.");
+            return;
+        }
+
+        const { jsPDF } = jspdf;
+        const doc = new jsPDF();
+        (doc as any).autoTable({
+            head: [['Month/Year', 'Category', 'Bill Amount', 'Paid Amount', 'Balance', 'Notes']],
+            body: propertyPayments.flatMap(p => {
+                const monthYear = `${MONTHS[p.month - 1]} ${p.year}`;
+                const rentRow = [
+                    monthYear,
+                    'Rent',
+                    `$${p.rentBillAmount.toFixed(2)}`,
+                    `$${p.rentPaidAmount.toFixed(2)}`,
+                    `$${(p.rentBillAmount - p.rentPaidAmount).toFixed(2)}`,
+                    p.notes || ''
+                ];
+                const utilRows = p.utilities.map(u => [
+                    monthYear,
+                    u.category,
+                    `$${u.billAmount.toFixed(2)}`,
+                    `$${u.paidAmount.toFixed(2)}`,
+                    `$${(u.billAmount - u.paidAmount).toFixed(2)}`,
+                    '' // Notes only on rent row for simplicity
+                ]);
+                return [rentRow, ...utilRows];
+            }),
+            didDrawPage: (data: any) => {
+                doc.setFontSize(20);
+                doc.text(`Payment Report: ${selectedProperty.name}`, 14, 22);
+                doc.setFontSize(10);
+                doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
+            },
+            startY: 35
+        });
+        
+        doc.save(`Payments-${selectedProperty.name.replace(/ /g,"_")}-${new Date().toISOString().split('T')[0]}.pdf`);
+    };
+
+    const handleExportCsv = () => {
+        if (!selectedProperty || propertyPayments.length === 0) {
+            alert("No payments to export for this property.");
+            return;
+        }
+
+        const headers = ['Month', 'Year', 'Category', 'Bill Amount', 'Paid Amount', 'Balance', 'Notes'];
+        const rows = propertyPayments.flatMap(p => {
+            const escapeCsv = (str: string) => `"${str.replace(/"/g, '""')}"`;
+            const rentRow = [
+                MONTHS[p.month - 1],
+                p.year,
+                'Rent',
+                p.rentBillAmount.toFixed(2),
+                p.rentPaidAmount.toFixed(2),
+                (p.rentBillAmount - p.rentPaidAmount).toFixed(2),
+                p.notes ? escapeCsv(p.notes) : ''
+            ].join(',');
+
+            const utilRows = p.utilities.map(u => [
+                MONTHS[p.month - 1],
+                p.year,
+                u.category,
+                u.billAmount.toFixed(2),
+                u.paidAmount.toFixed(2),
+                (u.billAmount - u.paidAmount).toFixed(2),
+                ''
+            ].join(','));
+
+            return [rentRow, ...utilRows];
+        });
+
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.setAttribute('href', URL.createObjectURL(blob));
+        link.setAttribute('download', `Payments-${selectedProperty.name.replace(/ /g,"_")}-${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
 
     const getStatusInfo = (billed: number, paid: number) => {
         if (billed === 0 && paid === 0) return { text: 'Not Billed', color: 'bg-gray-100 text-gray-800' };
@@ -253,13 +341,19 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
                 <h2 className="text-2xl font-bold">Payments</h2>
-                <div className="flex items-center gap-4">
-                    <select value={selectedPropertyId || ''} onChange={(e) => setSelectedPropertyId(e.target.value)} className="p-2 border rounded-lg bg-white shadow-sm w-full sm:w-64">
+                <div className="flex items-center gap-2 flex-wrap">
+                    <select value={selectedPropertyId || ''} onChange={(e) => setSelectedPropertyId(e.target.value)} className="p-2 border rounded-lg bg-white shadow-sm w-full sm:w-auto">
                          {properties.length === 0 && <option>No properties available</option>}
                         {properties.map(prop => (
                             <option key={prop.id} value={prop.id}>{prop.name}</option>
                         ))}
                     </select>
+                    <button onClick={handleExportPdf} disabled={!selectedProperty} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50">
+                        <ArrowDownTrayIcon className="w-4 h-4" /> Export PDF
+                    </button>
+                    <button onClick={handleExportCsv} disabled={!selectedProperty} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50">
+                        <ArrowDownTrayIcon className="w-4 h-4" /> Export Excel
+                    </button>
                     <button onClick={openAddModal} disabled={!selectedProperty} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                         <PlusIcon className="w-5 h-5" />
                         Record
