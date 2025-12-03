@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
-import { auth, isFirebaseConfigured } from '../firebaseConfig';
+import { auth } from '../firebaseConfig';
 
 // Declare the global firebase object provided by the scripts in index.html
 declare const firebase: any;
@@ -12,23 +12,12 @@ export interface User {
   email: string;
 }
 
-interface FirebaseConfig {
-  apiKey: string;
-  authDomain: string;
-  projectId: string;
-  storageBucket: string;
-  messagingSenderId: string;
-  appId: string;
-}
-
 interface AuthContextType {
   user: User | null;
   authStatus: AuthStatus;
-  isGoogleSignInConfigured: boolean;
   signInWithGoogle: () => void;
   continueAsGuest: () => void;
   logout: () => void;
-  saveFirebaseConfig: (config: FirebaseConfig) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -39,7 +28,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
 
   useEffect(() => {
-    if (!isFirebaseConfigured || !auth) {
+    if (!auth) {
         const storedStatus = sessionStorage.getItem('pmpr_authStatus') as AuthStatus;
         setAuthStatus(storedStatus === 'guest' ? 'guest' : 'idle');
         return;
@@ -71,8 +60,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = () => {
-    if (!isFirebaseConfigured || !auth) {
+    if (!auth) {
         console.error("Firebase is not configured. Cannot sign in with Google.");
+        alert("Google Sign-In is currently unavailable. Please contact the administrator.");
         return;
     }
 
@@ -94,12 +84,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
         .catch((error) => {
             console.error("Authentication failed:", error);
+            alert(`Authentication failed: ${error.message}`);
             setAuthStatus('idle');
         });
   };
 
   const continueAsGuest = () => {
-    if (isFirebaseConfigured && auth && auth.currentUser) {
+    if (auth && auth.currentUser) {
         auth.signOut();
     }
     setUser(null);
@@ -108,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    if (isFirebaseConfigured && auth) {
+    if (auth) {
       auth.signOut().then(() => {
         setUser(null);
         setAuthStatus('idle');
@@ -121,26 +112,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       sessionStorage.removeItem('pmpr_authStatus');
     }
   };
-
-  const saveFirebaseConfig = (config: FirebaseConfig) => {
-    try {
-      localStorage.setItem('pmpr_firebaseConfig', JSON.stringify(config));
-      // Reload the page to apply the new configuration from localStorage
-      window.location.reload();
-    } catch (e) {
-      console.error("Failed to save Firebase config:", e);
-      alert("An error occurred while trying to save the configuration.");
-    }
-  };
   
   const value = useMemo(() => ({
     user,
     authStatus,
-    isGoogleSignInConfigured: isFirebaseConfigured,
     signInWithGoogle,
     continueAsGuest,
     logout,
-    saveFirebaseConfig
   }), [user, authStatus]);
 
   if (authStatus === 'loading') {

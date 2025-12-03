@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant, Payment, RepairStatus, Repair } from '../types';
@@ -208,7 +209,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         for (let i = 1; i < lines.length; i++) {
             const values = lines[i].split(',');
             // Fix: Correctly type the accumulator and parse numbers to create a valid CsvRow object.
-            const record = headers.reduce((obj: any, header, index) => {
+            const record = headers.reduce((obj: Record<string, any>, header, index) => {
                 const value = values[index]?.trim();
                 if (header === 'Bill Amount' || header === 'Paid Amount') {
                     obj[header] = Number(value) || 0;
@@ -266,14 +267,14 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                             updated.utilities.push({ category: record.Category, billAmount: Number(record['Bill Amount']), paidAmount: Number(record['Paid Amount']) });
                         }
                     }
-                    await updatePayment(updated, [], []);
+                    updatePayment(updated);
                  } else {
-                     await addPayment({
+                     addPayment({
                          propertyId: property.id, year, month,
                          rentBillAmount: record.Type === 'Rent' ? Number(record['Bill Amount']) : 0,
                          rentPaidAmount: record.Type === 'Rent' ? Number(record['Paid Amount']) : 0,
                          utilities: record.Type === 'Utility' ? [{ category: record.Category, billAmount: Number(record['Bill Amount']), paidAmount: Number(record['Paid Amount'])}] : [],
-                     }, []);
+                     });
                  }
                  paymentsAdded++;
             }
@@ -284,7 +285,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     };
 
     const handleReconcile = () => {
-        // Fix: Explicitly type the accumulator for `reduce` to ensure `Object.values` returns a strongly typed array.
+        // FIX: Explicitly type the accumulator for `reduce` to ensure `Object.values` returns a strongly typed array.
         const paymentGroups = Object.values(payments.reduce<Record<string, Payment[]>>((acc, p) => {
             const key = `${p.propertyId}-${p.year}-${p.month}`;
             if (!acc[key]) acc[key] = [];
@@ -292,7 +293,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
             return acc;
         }, {})).filter(group => group.length > 1);
 
-        // Fix: Explicitly type the accumulator for `reduce` to ensure `Object.values` returns a strongly typed array.
+        // FIX: Explicitly type the accumulator for `reduce` to ensure `Object.values` returns a strongly typed array.
         const repairGroups = Object.values(repairs.reduce<Record<string, Repair[]>>((acc, r) => {
             const key = `${r.propertyId}-${r.description}-${r.cost}-${new Date(r.requestDate).toLocaleDateString()}`;
             if (!acc[key]) acc[key] = [];

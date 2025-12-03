@@ -1,25 +1,17 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
-import { Payment, Property, UtilityPayment, BillImage } from '../types';
+import { Payment, Property, UtilityPayment } from '../types';
 import Modal from '../components/Modal';
-import { CreditCardIcon, PlusIcon, PencilSquareIcon, TrashIcon, PaperClipIcon, XMarkIcon } from '../components/Icons';
+import { CreditCardIcon, PlusIcon, PencilSquareIcon, TrashIcon } from '../components/Icons';
 import { MONTHS } from '../constants';
 import { EditTarget } from '../App';
-
-const ImagePreviewModal: React.FC<{ imageUrl: string; onClose: () => void }> = ({ imageUrl, onClose }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex justify-center items-center p-4" onClick={onClose}>
-        <img src={imageUrl} alt="Bill Preview" className="max-w-full max-h-full rounded-lg" onClick={e => e.stopPropagation()} />
-        <button onClick={onClose} className="absolute top-4 right-4 text-white text-2xl">&times;</button>
-    </div>
-);
-
 
 const PaymentForm: React.FC<{
     property: Property;
     allPaymentsForProperty: Payment[];
     payment?: Payment;
-    onSave: (payment: Omit<Payment, 'id'> | Payment, newImages: File[], imagesToRemove: BillImage[]) => void; 
+    onSave: (payment: Omit<Payment, 'id'> | Payment) => void; 
     onCancel: () => void;
 }> = ({ property, allPaymentsForProperty, payment, onSave, onCancel }) => {
     const currentYear = new Date().getFullYear();
@@ -29,9 +21,6 @@ const PaymentForm: React.FC<{
     const [month, setMonth] = useState(payment?.month || currentMonth);
     const [rentPaidAmount, setRentPaidAmount] = useState(payment?.rentPaidAmount || 0);
     const [notes, setNotes] = useState(payment?.notes || '');
-    const [newFiles, setNewFiles] = useState<File[]>([]);
-    const [imagesToRemove, setImagesToRemove] = useState<BillImage[]>([]);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Calculate previous balances first
     const previousBalances = useMemo(() => {
@@ -77,20 +66,6 @@ const PaymentForm: React.FC<{
         newUtils[index] = { ...newUtils[index], [field]: parseFloat(value) || 0 };
         setUtilities(newUtils);
     };
-    
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files) {
-            setNewFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-        }
-    };
-
-    const removeNewFile = (index: number) => {
-        setNewFiles(prev => prev.filter((_, i) => i !== index));
-    };
-
-    const removeExistingImage = (image: BillImage) => {
-        setImagesToRemove(prev => [...prev, image]);
-    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -102,18 +77,15 @@ const PaymentForm: React.FC<{
             rentPaidAmount,
             utilities,
             notes,
-            billImages: payment?.billImages || [], // Pass existing images for context
             paymentDate: rentPaidAmount > 0 || utilities.some(u => u.paidAmount > 0) ? (payment?.paymentDate || new Date().toISOString()) : undefined,
         };
         
         if (payment) {
-            onSave({ ...payment, ...paymentData }, newFiles, imagesToRemove);
+            onSave({ ...payment, ...paymentData });
         } else {
-            onSave(paymentData, newFiles, imagesToRemove);
+            onSave(paymentData);
         }
     };
-
-    const currentImages = (payment?.billImages || []).filter(img => !imagesToRemove.some(rem => rem.url === img.url));
 
     return (
          <form onSubmit={handleSubmit} className="space-y-4">
@@ -164,41 +136,17 @@ const PaymentForm: React.FC<{
                     </div>
                 </div>
             ))}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
-                  <textarea
-                    id="notes"
-                    name="notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={3}
-                    className="w-full p-2 border rounded mt-1"
-                    placeholder="e.g., Paid via check #1234 on 10/15..."
-                  />
-                </div>
-                 <div>
-                    <label className="block text-sm font-medium text-gray-700">Attach Bill Images</label>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-1 w-full flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed rounded-md text-gray-500 hover:border-blue-500 hover:text-blue-600 transition-colors">
-                        <PaperClipIcon className="w-5 h-5"/>
-                        <span>Add Images</span>
-                    </button>
-                    <input type="file" multiple accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-                    <div className="flex flex-wrap gap-2 mt-2">
-                        {currentImages.map((img) => (
-                            <div key={img.url} className="relative">
-                                <img src={img.url} alt={img.name} className="h-16 w-16 object-cover rounded" />
-                                <button type="button" onClick={() => removeExistingImage(img)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><XMarkIcon className="w-3 h-3"/></button>
-                            </div>
-                        ))}
-                        {newFiles.map((file, index) => (
-                            <div key={index} className="relative">
-                                <img src={URL.createObjectURL(file)} alt={file.name} className="h-16 w-16 object-cover rounded" />
-                                <button type="button" onClick={() => removeNewFile(index)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><XMarkIcon className="w-3 h-3"/></button>
-                            </div>
-                        ))}
-                    </div>
-                 </div>
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
+              <textarea
+                id="notes"
+                name="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                className="w-full p-2 border rounded mt-1"
+                placeholder="e.g., Paid via check #1234 on 10/15..."
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
@@ -221,7 +169,6 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>(undefined);
-    const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
     const openAddModal = useCallback(() => {
         if (properties.length > 0) {
@@ -266,7 +213,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     const selectedProperty = useMemo(() => properties.find(p => p.id === selectedPropertyId), [properties, selectedPropertyId]);
     const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a,b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
 
-    const handleSavePayment = (paymentData: Omit<Payment, 'id'> | Payment, newImages: File[], imagesToRemove: BillImage[]) => {
+    const handleSavePayment = (paymentData: Omit<Payment, 'id'> | Payment) => {
         const existingPayment = payments.find(p =>
             p.propertyId === paymentData.propertyId &&
             p.year === paymentData.year &&
@@ -274,14 +221,14 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
         );
 
         if ('id' in paymentData) {
-            updatePayment(paymentData, newImages, imagesToRemove);
+            updatePayment(paymentData);
         } else if (existingPayment) {
             // This is an edge case: adding a payment for a month that already exists.
             // We should treat it as an update.
             const mergedPayment = { ...existingPayment, ...paymentData };
-            updatePayment(mergedPayment, newImages, imagesToRemove);
+            updatePayment(mergedPayment);
         } else {
-            addPayment(paymentData, newImages);
+            addPayment(paymentData);
         }
 
         setIsModalOpen(false);
@@ -367,25 +314,9 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                                          {payment.utilities.length === 0 && <p className="text-xs text-gray-500">No utilities tracked for this property.</p>}
                                     </div>
                                 </CardContent>
-                                {(payment.notes || (payment.billImages && payment.billImages.length > 0)) && (
-                                    <CardFooter className="space-y-3">
-                                        {payment.notes && <p className="text-sm text-gray-600 italic"><span className="font-semibold not-italic">Notes:</span> {payment.notes}</p>}
-                                        {payment.billImages && payment.billImages.length > 0 && (
-                                            <div>
-                                                <p className="text-sm font-semibold text-gray-700 mb-2">Attached Bills:</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {payment.billImages.map(img => (
-                                                        <img 
-                                                            key={img.url}
-                                                            src={img.url}
-                                                            alt={img.name}
-                                                            onClick={() => setPreviewImageUrl(img.url)}
-                                                            className="h-16 w-16 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity"
-                                                        />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                {payment.notes && (
+                                    <CardFooter>
+                                        <p className="text-sm text-gray-600 italic whitespace-pre-wrap"><span className="font-semibold not-italic">Notes:</span> {payment.notes}</p>
                                     </CardFooter>
                                 )}
                             </Card>
@@ -416,8 +347,6 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                     />
                 </Modal>
             )}
-            
-            {previewImageUrl && <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />}
         </div>
     );
 };
