@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import DashboardScreen from './screens/DashboardScreen';
 import PropertiesScreen from './screens/PropertiesScreen';
 import PaymentsScreen from './screens/PaymentsScreen';
@@ -28,6 +29,17 @@ const App: React.FC = () => {
   const [initialReportFilter, setInitialReportFilter] = useState<ReportFilter | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const { authStatus, user, logout, isReadOnly, activeDbOwner } = useAuth();
+
+  const revisionNumber = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `rev.${year}.${month}.${day}.${hours}${minutes}${seconds}`;
+  }, []);
 
   if (authStatus === 'idle') {
     return <LoginScreen />;
@@ -166,8 +178,9 @@ const App: React.FC = () => {
         </main>
       </div>
       
-      <footer className="w-full text-center text-xs text-gray-500 py-4 pb-20 md:py-4">
-        © 2025 C&SH Group Properties, LLC. Created for free using Google AIStudio and Render.com
+      <footer className="w-full flex justify-between items-center text-xs text-gray-500 py-4 px-4 sm:px-6 lg:px-8 pb-20 md:pb-4">
+        <span>© 2025 C&SH Group Properties, LLC. Created for free using Google AIStudio and Render.com</span>
+        <span>{revisionNumber}</span>
       </footer>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg flex justify-around md:hidden">
