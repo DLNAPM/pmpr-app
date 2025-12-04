@@ -137,7 +137,7 @@ const App: React.FC = () => {
         </div>
         {isReadOnly && (
             <div className="bg-yellow-100 border-t border-b border-yellow-200 text-yellow-800 text-sm text-center py-1.5 px-4">
-                You are viewing <strong>{activeDbOwner?.name}'s</strong> database in Read-Only mode.
+                You are viewing <strong>{activeDbOwner?.name}'s</strong> ({activeDbOwner?.email}) database in Read-Only mode.
             </div>
         )}
       </header>
