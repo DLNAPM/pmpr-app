@@ -85,3 +85,15 @@ export interface Share {
   propertyId: string;
   propertyName: string;
 }
+
+export interface Notification {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderEmail: string;
+  recipientEmail: string;
+  message: string;
+  timestamp: string; // ISO string
+  isAcknowledged: boolean;
+  userId: string; // Same as senderId for ownership rules
+}

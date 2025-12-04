@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import DashboardScreen from './screens/DashboardScreen';
 import PropertiesScreen from './screens/PropertiesScreen';
@@ -6,14 +5,16 @@ import PaymentsScreen from './screens/PaymentsScreen';
 import RepairsScreen from './screens/RepairsScreen';
 import ReportingScreen from './screens/ReportingScreen';
 import ContractorsScreen from './screens/ContractorsScreen';
-import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon } from './components/Icons';
+import NotificationsScreen from './screens/NotificationsScreen'; // Import new screen
+import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon, BellIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import HelpModal from './components/HelpModal';
 import ShareDataModal from './screens/ShareDataModal';
 import DatabaseSelectionScreen from './screens/DatabaseSelectionScreen';
+import { useAppContext } from './contexts/AppContext';
 
-type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting';
+type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications'; // Add notifications tab
 export type ReportFilter = { 
   status?: 'all' | 'collected' | 'outstanding';
   repairStatus?: 'all' | 'open' | 'completed';
@@ -29,6 +30,12 @@ const App: React.FC = () => {
   const [initialReportFilter, setInitialReportFilter] = useState<ReportFilter | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const { authStatus, user, logout, isReadOnly, activeDbOwner } = useAuth();
+  const { notifications } = useAppContext(); // Get notifications for badge
+
+  const unreadCount = useMemo(() => {
+    if (!user || !notifications) return 0;
+    return notifications.filter(n => n.recipientEmail.toLowerCase() === user.email.toLowerCase() && !n.isAcknowledged).length;
+  }, [notifications, user]);
 
   const revisionNumber = useMemo(() => {
     const now = new Date();
@@ -95,6 +102,8 @@ const App: React.FC = () => {
                   onFilterApplied={() => setInitialReportFilter(null)} 
                   onEditItem={handleEditFromReport}
                 />;
+      case 'notifications': // Add case for notifications
+        return <NotificationsScreen />;
       default:
         return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
     }
@@ -103,7 +112,7 @@ const App: React.FC = () => {
   const NavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactNode }> = ({ tabName, label, icon }) => (
     <button
       onClick={() => setActiveTab(tabName)}
-      className={`flex flex-col items-center justify-center w-full pt-2 pb-1 text-xs transition-colors duration-200 ${
+      className={`relative flex flex-col items-center justify-center w-full pt-2 pb-1 text-xs transition-colors duration-200 ${
         activeTab === tabName ? 'text-blue-600' : 'text-gray-500 hover:text-blue-500'
       }`}
     >
@@ -112,15 +121,18 @@ const App: React.FC = () => {
     </button>
   );
 
-  const SideNavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactElement<{ className?: string }> }> = ({ tabName, label, icon }) => (
+  const SideNavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactElement<{ className?: string }>; hasBadge?: boolean; }> = ({ tabName, label, icon, hasBadge }) => (
     <button
       onClick={() => setActiveTab(tabName)}
-      className={`flex items-center w-full px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors duration-200 ${
+      className={`relative flex items-center w-full px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors duration-200 ${
         activeTab === tabName ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-slate-200 hover:text-gray-900'
       }`}
     >
       {React.cloneElement(icon, { className: 'w-5 h-5 mr-3 flex-shrink-0' })}
       <span>{label}</span>
+      {hasBadge && (
+        <span className="absolute left-7 top-1.5 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
+      )}
     </button>
   );
 
@@ -170,6 +182,7 @@ const App: React.FC = () => {
                 <SideNavItem tabName="repairs" label="Repairs" icon={<WrenchScrewdriverIcon />} />
                 <SideNavItem tabName="contractors" label="Contractors" icon={<UsersIcon />} />
                 <SideNavItem tabName="reporting" label="Reporting" icon={<DocumentChartBarIcon />} />
+                <SideNavItem tabName="notifications" label="Notifications" icon={<BellIcon />} hasBadge={unreadCount > 0} />
             </nav>
         </aside>
         
@@ -187,8 +200,12 @@ const App: React.FC = () => {
         <NavItem tabName="dashboard" label="Dashboard" icon={<ChartPieIcon className="w-6 h-6" />} />
         <NavItem tabName="properties" label="Properties" icon={<BuildingOfficeIcon className="w-6 h-6" />} />
         <NavItem tabName="payments" label="Payments" icon={<CreditCardIcon className="w-6 h-6" />} />
-        <NavItem tabName="repairs" label="Repairs" icon={<WrenchScrewdriverIcon className="w-6 h-6" />} />
-        <NavItem tabName="contractors" label="Contractors" icon={<UsersIcon className="w-6 h-6" />} />
+        <NavItem tabName="notifications" label="Notifications" icon={
+          <div className="relative">
+            <BellIcon className="w-6 h-6" />
+            {unreadCount > 0 && <span className="absolute -top-1 -right-1 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>}
+          </div>
+        } />
       </nav>
       <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
        {authStatus === 'authenticated' && !isReadOnly && <ShareDataModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />}
