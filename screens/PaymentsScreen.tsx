@@ -15,7 +15,7 @@ const PaymentForm: React.FC<{
     property: Property;
     allPaymentsForProperty: Payment[];
     payment?: Payment;
-    onSave: (payment: Omit<Payment, 'id'> | Payment) => void; 
+    onSave: (payment: Omit<Payment, 'id' | 'userId'> | Payment) => void; 
     onCancel: () => void;
 }> = ({ property, allPaymentsForProperty, payment, onSave, onCancel }) => {
     const currentYear = new Date().getFullYear();
@@ -172,16 +172,19 @@ interface PaymentsScreenProps {
 
 const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, payments, getPaymentsForProperty, addPayment, updatePayment, deletePayment } = useAppContext();
-    const { isReadOnly } = useAuth();
+    const { user } = useAuth();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>(undefined);
 
+    const selectedProperty = useMemo(() => properties.find(p => p.id === selectedPropertyId), [properties, selectedPropertyId]);
+    const isReadOnly = selectedProperty?.userId !== user?.id;
+
     const openAddModal = useCallback(() => {
-        if (isReadOnly || properties.length === 0) return;
+        if (isReadOnly || properties.length === 0 || !selectedProperty) return;
         setSelectedPayment(undefined);
         setIsModalOpen(true);
-    }, [properties.length, isReadOnly]);
+    }, [properties.length, isReadOnly, selectedProperty]);
     
     const openEditModal = useCallback((payment: Payment) => {
         if (isReadOnly) return;
@@ -201,11 +204,18 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
             const paymentToEdit = payments.find(p => p.id === editTarget.id);
             if (paymentToEdit) {
                 setSelectedPropertyId(paymentToEdit.propertyId);
-                openEditModal(paymentToEdit);
+                // The modal will be opened by the effect below once selectedProperty is updated
             }
             onActionDone();
         }
-    }, [editTarget, onActionDone, payments, openEditModal]);
+    }, [editTarget, onActionDone, payments]);
+
+    useEffect(() => {
+        if(editTarget && editTarget.type === 'payment' && selectedProperty && selectedProperty.id === editTarget.id) {
+            const paymentToEdit = payments.find(p => p.id === editTarget.id);
+            if(paymentToEdit) openEditModal(paymentToEdit);
+        }
+    }, [selectedProperty, editTarget, payments, openEditModal]);
     
     useEffect(() => {
         if (!selectedPropertyId && properties.length > 0) {
@@ -213,14 +223,13 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
         }
     }, [properties, selectedPropertyId]);
     
-    const selectedProperty = useMemo(() => properties.find(p => p.id === selectedPropertyId), [properties, selectedPropertyId]);
     const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a,b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
 
-    const handleSavePayment = (paymentData: Omit<Payment, 'id'> | Payment) => {
+    const handleSavePayment = (paymentData: Omit<Payment, 'id' | 'userId'> | Payment) => {
         if(isReadOnly) return;
         const existingPayment = payments.find(p => p.propertyId === paymentData.propertyId && p.year === paymentData.year && p.month === paymentData.month );
         if ('id' in paymentData) {
-            updatePayment(paymentData);
+            updatePayment(paymentData as Payment);
         } else if (existingPayment) {
             updatePayment({ ...existingPayment, ...paymentData });
         } else {
@@ -275,18 +284,16 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                          {properties.length === 0 && <option>No properties available</option>}
                         {properties.map(prop => <option key={prop.id} value={prop.id}>{prop.name}</option>)}
                     </select>
-                    <button onClick={handleExportPdf} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button onClick={handleExportPdf} disabled={!selectedProperty} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                         <ArrowDownTrayIcon className="w-4 h-4" /> Export PDF
                     </button>
-                    <button onClick={handleExportCsv} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button onClick={handleExportCsv} disabled={!selectedProperty} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                         <ArrowDownTrayIcon className="w-4 h-4" /> Export Excel
                     </button>
-                    {!isReadOnly && (
-                        <button onClick={openAddModal} disabled={!selectedProperty} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
-                            <PlusIcon className="w-5 h-5" />
-                            Record
-                        </button>
-                    )}
+                    <button onClick={openAddModal} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                        <PlusIcon className="w-5 h-5" />
+                        Record
+                    </button>
                 </div>
             </div>
 

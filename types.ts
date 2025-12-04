@@ -28,7 +28,7 @@ export interface Payment {
   utilities: UtilityPayment[];
   notes?: string;
   paymentDate?: string; // ISO string for when the last payment part was made
-  userId?: string;
+  userId: string;
 }
 
 export interface Contractor {
@@ -39,7 +39,7 @@ export interface Contractor {
   companyAddress?: string;
   email?: string;
   comments?: string;
-  userId?: string;
+  userId: string;
 }
 
 export interface Repair {
@@ -53,7 +53,7 @@ export interface Repair {
   requestDate: string; // ISO string
   repairDate?: string; // ISO string for when the repair was done
   completionDate?: string; // ISO string for when status became 'Complete'
-  userId?: string;
+  userId: string;
 }
 
 export interface Property {
@@ -66,7 +66,12 @@ export interface Property {
   securityDeposit: number;
   rentAmount: number; // This is the standard monthly rent bill amount
   utilitiesToTrack: string[];
-  userId?: string;
+  userId: string;
+  // For UI purposes on shared properties
+  ownerInfo?: {
+    name: string;
+    email: string;
+  }
 }
 
 export interface DBOwner {
@@ -75,11 +80,14 @@ export interface DBOwner {
   email: string;
 }
 
+// Updated Share to be per-property
 export interface Share {
   id: string;
   ownerId: string;
   ownerName: string;
   ownerEmail: string;
   viewerEmail: string;
-  viewerId?: string; // Will be populated once the viewer logs in and is found
+  viewerId?: string;
+  propertyId: string;
+  propertyName: string;
 }

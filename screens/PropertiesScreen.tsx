@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import Card, { CardContent, CardHeader } from '../components/Card';
+import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant } from '../types';
-import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon } from '../components/Icons';
+import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon, ShareIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { UTILITY_CATEGORIES } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 
-const PropertyForm: React.FC<{property?: Property; onSave: (property: Omit<Property, 'id'> | Property) => void; onCancel: () => void}> = ({ property, onSave, onCancel }) => {
-    const [formData, setFormData] = useState<Omit<Property, 'id'>>({
+const PropertyForm: React.FC<{property?: Property; onSave: (property: Omit<Property, 'id' | 'userId'> | Property) => void; onCancel: () => void}> = ({ property, onSave, onCancel }) => {
+    const [formData, setFormData] = useState<Omit<Property, 'id' | 'userId' | 'ownerInfo'>>({
         name: property?.name || '',
         address: property?.address || '',
         rentAmount: property?.rentAmount || 0,
@@ -30,6 +30,15 @@ const PropertyForm: React.FC<{property?: Property; onSave: (property: Omit<Prope
         setFormData(prev => ({ ...prev, tenants: newTenants }));
     };
 
+    const addTenant = () => {
+        setFormData(prev => ({ ...prev, tenants: [...prev.tenants, {id: crypto.randomUUID(), name: '', email: '', phone: ''}] }));
+    };
+
+    const removeTenant = (index: number) => {
+        if (formData.tenants.length <= 1) return; // Must have at least one tenant
+        setFormData(prev => ({ ...prev, tenants: prev.tenants.filter((_, i) => i !== index) }));
+    };
+
     const handleUtilityToggle = (utility: string) => {
         setFormData(prev => {
             const newUtils = prev.utilitiesToTrack.includes(utility)
@@ -46,7 +55,7 @@ const PropertyForm: React.FC<{property?: Property; onSave: (property: Omit<Prope
             leaseStart: new Date(formData.leaseStart).toISOString(),
             leaseEnd: new Date(formData.leaseEnd).toISOString(),
         };
-        onSave(property ? { ...propertyData, id: property.id } : propertyData);
+        onSave(property ? { ...propertyData, id: property.id, userId: property.userId } : propertyData);
     };
 
     return (
@@ -76,12 +85,20 @@ const PropertyForm: React.FC<{property?: Property; onSave: (property: Omit<Prope
             <div>
                 <h3 className="font-semibold mb-2">Tenant Information</h3>
                 {formData.tenants.map((tenant, index) => (
-                    <div key={tenant.id} className="p-2 border rounded mb-2 space-y-2">
-                        <input type="text" value={tenant.name} onChange={(e) => handleTenantChange(index, 'name', e.target.value)} placeholder="Tenant Name" required className="w-full p-2 border rounded" />
+                    <div key={tenant.id} className="p-3 border rounded mb-2 space-y-2 bg-slate-50 relative">
+                         {formData.tenants.length > 1 && (
+                            <button type="button" onClick={() => removeTenant(index)} className="absolute top-2 right-2 text-red-500 hover:text-red-700">
+                                <TrashIcon className="w-5 h-5"/>
+                            </button>
+                        )}
+                        <input type="text" value={tenant.name} onChange={(e) => handleTenantChange(index, 'name', e.target.value)} placeholder={`Tenant ${index + 1} Name`} required className="w-full p-2 border rounded" />
                         <input type="email" value={tenant.email} onChange={(e) => handleTenantChange(index, 'email', e.target.value)} placeholder="Tenant Email" required className="w-full p-2 border rounded" />
                         <input type="tel" value={tenant.phone} onChange={(e) => handleTenantChange(index, 'phone', e.target.value)} placeholder="Tenant Phone" required className="w-full p-2 border rounded" />
                     </div>
                 ))}
+                <button type="button" onClick={addTenant} className="mt-2 flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium">
+                    <PlusIcon className="w-4 h-4" /> Add Another Tenant
+                </button>
             </div>
              <div>
                 <h3 className="font-semibold mb-2">Utilities to Track</h3>
@@ -108,18 +125,16 @@ interface PropertiesScreenProps {
 
 const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDone }) => {
     const { properties, addProperty, updateProperty, deleteProperty } = useAppContext();
-    const { isReadOnly } = useAuth();
+    const { user } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState<Property | undefined>(undefined);
 
     const openAddModal = useCallback(() => {
-        if (isReadOnly) return;
         setSelectedProperty(undefined);
         setIsModalOpen(true);
-    }, [isReadOnly]);
+    }, []);
 
     const openEditModal = (property: Property) => {
-        if (isReadOnly) return;
         setSelectedProperty(property);
         setIsModalOpen(true);
     };
@@ -132,9 +147,9 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
     }, [action, onActionDone, openAddModal]);
 
 
-    const handleSave = (propertyData: Omit<Property, 'id'> | Property) => {
+    const handleSave = (propertyData: Omit<Property, 'id' | 'userId'> | Property) => {
         if ('id' in propertyData) {
-            updateProperty(propertyData);
+            updateProperty(propertyData as Property);
         } else {
             addProperty(propertyData);
         }
@@ -143,7 +158,6 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
     };
 
     const handleDelete = (propertyId: string) => {
-        if (isReadOnly) return;
         const property = properties.find(p => p.id === propertyId);
         if (!property) return;
         if (window.confirm(`Are you sure you want to delete "${property.name}"? This will also delete ALL associated payment and repair records. This action cannot be undone.`)) {
@@ -151,21 +165,21 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
         }
     };
 
+    const isOwned = (property: Property) => property.userId === user?.id;
+
 
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Properties</h2>
-                {!isReadOnly && (
-                    <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors">
-                        <PlusIcon className="w-5 h-5" />
-                        Add Property
-                    </button>
-                )}
+                <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors">
+                    <PlusIcon className="w-5 h-5" />
+                    Add Property
+                </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {properties.map(prop => (
-                    <Card key={prop.id} onClick={!isReadOnly ? () => openEditModal(prop) : undefined}>
+                    <Card key={prop.id}>
                         <CardHeader className="flex justify-between items-start">
                             <div className="flex-1 pr-2">
                                 <h3 className="font-bold text-lg text-blue-800">{prop.name}</h3>
@@ -180,7 +194,7 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                   <span>{prop.address}</span>
                                 </a>
                             </div>
-                           {!isReadOnly && (
+                           {isOwned(prop) && (
                              <div className="flex items-center flex-shrink-0">
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); openEditModal(prop); }} 
@@ -200,23 +214,28 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                            )}
                         </CardHeader>
                          <CardContent>
-                            {prop.tenants.map(tenant => (
-                                <div key={tenant.id} className="flex items-center gap-3">
-                                    <UserIcon className="w-5 h-5 text-gray-400" />
+                            {prop.tenants.map((tenant, index) => (
+                                <div key={tenant.id} className={`flex items-center gap-3 ${index > 0 ? 'mt-3 pt-3 border-t' : ''}`}>
+                                    <UserIcon className="w-5 h-5 text-gray-400 flex-shrink-0" />
                                     <div>
                                         <p className="font-medium">{tenant.name}</p>
-                                        <p className="text-xs text-gray-500">{tenant.email}</p>
+                                        <p className="text-xs text-gray-500">{tenant.email} &bull; {tenant.phone}</p>
                                     </div>
                                 </div>
                             ))}
                         </CardContent>
+                        {prop.ownerInfo && (
+                            <CardFooter>
+                                <p className="text-xs text-gray-500">Shared by: {prop.ownerInfo.name}</p>
+                            </CardFooter>
+                        )}
                     </Card>
                 ))}
                  {properties.length === 0 && (
                     <div className="md:col-span-3 text-center py-10 text-gray-500">
                         <BuildingOfficeIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
                         <p>No properties found.</p>
-                        {!isReadOnly && <p>Click "Add Property" to get started.</p>}
+                        <p>Click "Add Property" to get started.</p>
                     </div>
                 )}
             </div>
