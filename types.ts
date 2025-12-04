@@ -68,3 +68,18 @@ export interface Property {
   utilitiesToTrack: string[];
   userId?: string;
 }
+
+export interface Share {
+    id: string;
+    ownerId: string;
+    ownerName: string;
+    ownerEmail: string;
+    viewerEmail: string;
+    viewerId?: string; // Added when viewer first logs in
+}
+
+export interface DBOwner {
+    id: string;
+    name: string;
+    email: string;
+}

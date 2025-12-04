@@ -5,6 +5,7 @@ import { Property, Tenant } from '../types';
 import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { UTILITY_CATEGORIES } from '../constants';
+import { useAuth } from '../contexts/AuthContext';
 
 const PropertyForm: React.FC<{property?: Property; onSave: (property: Omit<Property, 'id'> | Property) => void; onCancel: () => void}> = ({ property, onSave, onCancel }) => {
     const [formData, setFormData] = useState<Omit<Property, 'id'>>({
@@ -107,6 +108,7 @@ interface PropertiesScreenProps {
 
 const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDone }) => {
     const { properties, addProperty, updateProperty, deleteProperty } = useAppContext();
+    const { isReadOnly } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState<Property | undefined>(undefined);
 
@@ -121,11 +123,11 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
     };
 
     useEffect(() => {
-        if (action === 'add') {
+        if (action === 'add' && !isReadOnly) {
           openAddModal();
           onActionDone();
         }
-    }, [action, onActionDone, openAddModal]);
+    }, [action, onActionDone, openAddModal, isReadOnly]);
 
 
     const handleSave = (propertyData: Omit<Property, 'id'> | Property) => {
@@ -151,14 +153,13 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Properties</h2>
-                <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors">
+                <button onClick={openAddModal} disabled={isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
                     <PlusIcon className="w-5 h-5" />
                     Add Property
                 </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {properties.map(prop => (
-                    // FIX: Moved onClick to the parent Card component to make the whole card clickable and fix the error on CardContent.
                     <Card key={prop.id} onClick={() => openEditModal(prop)}>
                         <CardHeader className="flex justify-between items-start">
                             <div className="flex-1 pr-2">
@@ -174,22 +175,24 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                   <span>{prop.address}</span>
                                 </a>
                             </div>
-                            <div className="flex items-center flex-shrink-0">
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); openEditModal(prop); }} 
-                                    className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors"
-                                    aria-label="Edit Property"
-                                >
-                                    <PencilSquareIcon className="w-5 h-5"/>
-                                </button>
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); handleDelete(prop.id); }} 
-                                    className="text-gray-400 hover:text-red-600 p-1 rounded-full transition-colors"
-                                    aria-label="Delete Property"
-                                >
-                                    <TrashIcon className="w-5 h-5"/>
-                                </button>
-                            </div>
+                            {!isReadOnly && (
+                                <div className="flex items-center flex-shrink-0">
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); openEditModal(prop); }} 
+                                        className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors"
+                                        aria-label="Edit Property"
+                                    >
+                                        <PencilSquareIcon className="w-5 h-5"/>
+                                    </button>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(prop.id); }} 
+                                        className="text-gray-400 hover:text-red-600 p-1 rounded-full transition-colors"
+                                        aria-label="Delete Property"
+                                    >
+                                        <TrashIcon className="w-5 h-5"/>
+                                    </button>
+                                </div>
+                            )}
                         </CardHeader>
                          <CardContent>
                             {prop.tenants.map(tenant => (
