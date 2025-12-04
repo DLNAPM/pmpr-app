@@ -20,7 +20,6 @@ const ShareDataModal: React.FC<ShareDataModalProps> = ({ isOpen, onClose }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // FIX: The 'ownerInfo' property does not exist on the 'Property' type.
   // When this modal is open, the user is viewing their own data, so all properties from the context are owned properties.
   const ownedProperties = properties;
 
