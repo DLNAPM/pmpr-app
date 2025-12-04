@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import DashboardScreen from './screens/DashboardScreen';
 import PropertiesScreen from './screens/PropertiesScreen';
@@ -5,12 +6,10 @@ import PaymentsScreen from './screens/PaymentsScreen';
 import RepairsScreen from './screens/RepairsScreen';
 import ReportingScreen from './screens/ReportingScreen';
 import ContractorsScreen from './screens/ContractorsScreen';
-import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon } from './components/Icons';
+import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import HelpModal from './components/HelpModal';
-import DatabaseSelectionScreen from './screens/DatabaseSelectionScreen';
-import ShareDataModal from './screens/ShareDataModal';
 
 type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting';
 export type ReportFilter = { 
@@ -24,18 +23,12 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [action, setAction] = useState<string | null>(null);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [initialReportFilter, setInitialReportFilter] = useState<ReportFilter | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
-  const { authStatus, user, logout, activeDbOwner, isReadOnly, sharesForMe } = useAuth();
+  const { authStatus, user, logout } = useAuth();
 
   if (authStatus === 'idle' || authStatus === 'loading') {
     return <LoginScreen />;
-  }
-  
-  // After authentication, if no DB is selected and shares exist, show selection screen.
-  if (authStatus === 'authenticated' && !activeDbOwner && sharesForMe.length > 0) {
-      return <DatabaseSelectionScreen />;
   }
 
   const handleAction = (tab: Tab, actionName: string = 'add') => {
@@ -58,27 +51,49 @@ const App: React.FC = () => {
     setEditTarget(null);
   };
 
+
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
-      case 'properties': return <PropertiesScreen action={action} onActionDone={onActionDone} />;
-      case 'payments': return <PaymentsScreen action={action} editTarget={editTarget} onActionDone={onActionDone} />;
-      case 'repairs': return <RepairsScreen action={action} editTarget={editTarget} onActionDone={onActionDone} />;
-      case 'contractors': return <ContractorsScreen />;
-      case 'reporting': return <ReportingScreen initialFilter={initialReportFilter} onFilterApplied={() => setInitialReportFilter(null)} onEditItem={handleEditFromReport} />;
-      default: return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
+      case 'dashboard':
+        return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
+      case 'properties':
+        return <PropertiesScreen action={action} onActionDone={onActionDone} />;
+      case 'payments':
+        return <PaymentsScreen action={action} editTarget={editTarget} onActionDone={onActionDone} />;
+      case 'repairs':
+        return <RepairsScreen action={action} editTarget={editTarget} onActionDone={onActionDone} />;
+      case 'contractors':
+        return <ContractorsScreen />;
+      case 'reporting':
+        return <ReportingScreen 
+                  initialFilter={initialReportFilter} 
+                  onFilterApplied={() => setInitialReportFilter(null)} 
+                  onEditItem={handleEditFromReport}
+                />;
+      default:
+        return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
     }
   };
 
   const NavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactNode }> = ({ tabName, label, icon }) => (
-    <button onClick={() => setActiveTab(tabName)} className={`flex flex-col items-center justify-center w-full pt-2 pb-1 text-xs transition-colors duration-200 ${ activeTab === tabName ? 'text-blue-600' : 'text-gray-500 hover:text-blue-500' }`} >
+    <button
+      onClick={() => setActiveTab(tabName)}
+      className={`flex flex-col items-center justify-center w-full pt-2 pb-1 text-xs transition-colors duration-200 ${
+        activeTab === tabName ? 'text-blue-600' : 'text-gray-500 hover:text-blue-500'
+      }`}
+    >
       {icon}
       <span className="mt-1">{label}</span>
     </button>
   );
 
   const SideNavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactElement<{ className?: string }> }> = ({ tabName, label, icon }) => (
-    <button onClick={() => setActiveTab(tabName)} className={`flex items-center w-full px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors duration-200 ${ activeTab === tabName ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-slate-200 hover:text-gray-900' }`} >
+    <button
+      onClick={() => setActiveTab(tabName)}
+      className={`flex items-center w-full px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors duration-200 ${
+        activeTab === tabName ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-slate-200 hover:text-gray-900'
+      }`}
+    >
       {React.cloneElement(icon, { className: 'w-5 h-5 mr-3 flex-shrink-0' })}
       <span>{label}</span>
     </button>
@@ -91,11 +106,6 @@ const App: React.FC = () => {
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-blue-800 tracking-tight">PMPR App</h1>
             <div className="flex items-center gap-4">
-               {!isReadOnly && authStatus === 'authenticated' && (
-                 <button onClick={() => setIsShareModalOpen(true)} className="text-gray-500 hover:text-blue-600 transition-colors" aria-label="Share My Data">
-                    <ShareIcon className="w-6 h-6" />
-                 </button>
-               )}
                <button onClick={() => setIsHelpModalOpen(true)} className="text-gray-500 hover:text-blue-600 transition-colors" aria-label="Help">
                    <QuestionMarkCircleIcon className="w-6 h-6" />
                </button>
@@ -114,13 +124,6 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
-        {isReadOnly && activeDbOwner && (
-            <div className="bg-yellow-100 border-t border-b border-yellow-200 text-center py-1.5">
-                <p className="text-sm font-semibold text-yellow-800">
-                    You are viewing {activeDbOwner.name}'s database (Read-Only)
-                </p>
-            </div>
-        )}
       </header>
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-grow w-full">
@@ -152,7 +155,6 @@ const App: React.FC = () => {
         <NavItem tabName="contractors" label="Contractors" icon={<UsersIcon className="w-6 h-6" />} />
       </nav>
       <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
-      {authStatus === 'authenticated' && <ShareDataModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />}
     </div>
   );
 };

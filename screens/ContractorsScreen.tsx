@@ -4,7 +4,6 @@ import { useAppContext } from '../contexts/AppContext';
 import { Contractor } from '../types';
 import { PlusIcon, UsersIcon, PencilSquareIcon, ArrowDownTrayIcon, ArrowUpTrayIcon } from '../components/Icons';
 import Modal from '../components/Modal';
-import { useAuth } from '../contexts/AuthContext';
 
 const ContractorForm: React.FC<{
     contractor?: Contractor;
@@ -27,8 +26,11 @@ const ContractorForm: React.FC<{
     
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (formData.name && formData.contact) onSave(contractor ? { ...formData, id: contractor.id } : formData);
-        else alert("Contact Person Name and Phone are required.");
+        if (formData.name && formData.contact) {
+            onSave(contractor ? { ...formData, id: contractor.id } : formData);
+        } else {
+            alert("Contact Person Name and Phone are required.");
+        }
     };
 
     return (
@@ -55,12 +57,12 @@ interface ImportPreview {
 
 const ContractorsScreen: React.FC = () => {
     const { contractors, addContractor, updateContractor } = useAppContext();
-    const { isReadOnly } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedContractor, setSelectedContractor] = useState<Contractor | undefined>(undefined);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
 
     const openAddModal = () => {
         setSelectedContractor(undefined);
@@ -73,26 +75,42 @@ const ContractorsScreen: React.FC = () => {
     };
     
     const handleSave = (contractorData: Omit<Contractor, 'id'> | Contractor) => {
-        if ('id' in contractorData && contractorData.id) updateContractor(contractorData);
-        else addContractor(contractorData);
+        if ('id' in contractorData && contractorData.id) {
+            updateContractor(contractorData);
+        } else {
+            addContractor(contractorData);
+        }
         setIsModalOpen(false);
         setSelectedContractor(undefined);
     };
     
     const handleExport = () => {
         const headers = ['Name', 'Contact', 'CompanyName', 'CompanyAddress', 'Email', 'Comments'];
+        
         const escapeCsvCell = (cellData: string | undefined) => {
             if (cellData === undefined || cellData === null) return '';
             const str = String(cellData);
-            if (str.includes(',') || str.includes('"') || str.includes('\n')) return `"${str.replace(/"/g, '""')}"`;
+            // If the cell contains a comma, quote, or newline, wrap it in double quotes.
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                // Escape existing double quotes by doubling them
+                return `"${str.replace(/"/g, '""')}"`;
+            }
             return str;
         };
-        const rows = contractors.map(c => [c.name, c.contact, c.companyName, c.companyAddress, c.email, c.comments].map(escapeCsvCell).join(','));
+
+        const rows = contractors.map(c => 
+            [c.name, c.contact, c.companyName, c.companyAddress, c.email, c.comments]
+            .map(escapeCsvCell)
+            .join(',')
+        );
+        
         const csvContent = [headers.join(','), ...rows].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
-        link.setAttribute('href', URL.createObjectURL(blob));
-        link.setAttribute('download', `pmpr_contractors_${new Date().toISOString().split('T')[0]}.csv`);
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        const date = new Date().toISOString().split('T')[0];
+        link.setAttribute('download', `pmpr_contractors_${date}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -101,18 +119,33 @@ const ContractorsScreen: React.FC = () => {
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
+
         const reader = new FileReader();
-        reader.onload = (e) => processCsv(e.target?.result as string);
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            processCsv(text);
+        };
         reader.readAsText(file);
     };
 
     const processCsv = (csvText: string) => {
         const lines = csvText.split(/\r\n|\n/).filter(line => line.trim());
-        if (lines.length < 2) return alert('CSV file must have a header row and at least one data row.');
+        if (lines.length < 2) {
+            alert('CSV file must have a header row and at least one data row.');
+            return;
+        }
+
         const headers = lines[0].split(',').map(h => h.trim());
-        if (!['Name', 'Contact'].every(h => headers.includes(h))) return alert(`CSV is missing required headers. Must include: Name, Contact`);
+        const requiredHeaders = ['Name', 'Contact'];
+        if (!requiredHeaders.every(h => headers.includes(h))) {
+            alert(`CSV is missing required headers. Must include: ${requiredHeaders.join(', ')}`);
+            return;
+        }
+
         const preview: ImportPreview = { validRecords: [], errors: [] };
+
         for (let i = 1; i < lines.length; i++) {
+            // This is a simple parser and doesn't handle quotes. For production, a more robust library would be better.
             const values = lines[i].split(',');
             const rowData: Omit<Contractor, 'id'> = {
                 name: values[headers.indexOf('Name')]?.trim() || '',
@@ -122,34 +155,51 @@ const ContractorsScreen: React.FC = () => {
                 email: values[headers.indexOf('Email')]?.trim(),
                 comments: values[headers.indexOf('Comments')]?.trim(),
             };
+
             if (!rowData.name || !rowData.contact) {
                 preview.errors.push({ row: i + 1, message: 'Missing Name or Contact.' });
                 continue;
             }
+
             preview.validRecords.push(rowData);
         }
+        
         setImportPreview(preview);
         setIsImportModalOpen(true);
-        if(fileInputRef.current) fileInputRef.current.value = "";
+        if(fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
     };
     
     const handleConfirmImport = () => {
         if (!importPreview?.validRecords) return;
-        importPreview.validRecords.forEach(contractorData => addContractor(contractorData));
+        
+        importPreview.validRecords.forEach(contractorData => {
+            addContractor(contractorData);
+        });
+        
         alert(`${importPreview.validRecords.length} contractors imported successfully.`);
         setIsImportModalOpen(false);
         setImportPreview(null);
     };
+
 
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Contractors</h2>
                  <div className="flex gap-2">
-                    <button onClick={() => fileInputRef.current?.click()} disabled={isReadOnly} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50"> <ArrowUpTrayIcon className="w-4 h-4" /> Import </button>
+                    <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
+                        <ArrowUpTrayIcon className="w-4 h-4" />
+                        Import
+                    </button>
                     <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".csv" className="hidden"/>
-                    <button onClick={handleExport} disabled={isReadOnly} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50"> <ArrowDownTrayIcon className="w-4 h-4" /> Export </button>
-                    <button onClick={openAddModal} disabled={isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"> <PlusIcon className="w-5 h-5" /> Add Contractor </button>
+                    <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
+                        <ArrowDownTrayIcon className="w-4 h-4" />
+                        Export
+                    </button>
+                    <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors">
+                        <PlusIcon className="w-5 h-5" />
+                        Add Contractor
+                    </button>
                 </div>
             </div>
             <div className="space-y-4">
@@ -165,11 +215,13 @@ const ContractorsScreen: React.FC = () => {
                                     {c.companyAddress && <p className="text-gray-600 text-sm">{c.companyAddress}</p>}
                                     {c.comments && <p className="text-sm text-gray-500 italic mt-2 p-2 bg-slate-50 rounded-md whitespace-pre-wrap">{c.comments}</p>}
                                 </div>
-                                {!isReadOnly && (
-                                    <button onClick={() => openEditModal(c)} className="text-gray-400 hover:text-blue-600 p-2 rounded-full transition-colors flex-shrink-0" aria-label="Edit Contractor">
-                                        <PencilSquareIcon className="w-5 h-5"/>
-                                    </button>
-                                )}
+                                <button 
+                                    onClick={() => openEditModal(c)}
+                                    className="text-gray-400 hover:text-blue-600 p-2 rounded-full transition-colors flex-shrink-0"
+                                    aria-label="Edit Contractor"
+                                >
+                                    <PencilSquareIcon className="w-5 h-5"/>
+                                </button>
                             </div>
                         </CardContent>
                     </Card>
@@ -183,7 +235,11 @@ const ContractorsScreen: React.FC = () => {
                 )}
             </div>
              <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedContractor ? "Edit Contractor" : "Add New Contractor"}>
-                <ContractorForm contractor={selectedContractor} onSave={handleSave} onCancel={() => setIsModalOpen(false)} />
+                <ContractorForm 
+                    contractor={selectedContractor} 
+                    onSave={handleSave} 
+                    onCancel={() => setIsModalOpen(false)} 
+                />
             </Modal>
             
             {importPreview && (
@@ -201,7 +257,9 @@ const ContractorsScreen: React.FC = () => {
                          <p className="text-sm text-gray-600">Only valid records will be imported. Please review before continuing.</p>
                          <div className="flex justify-end gap-2 pt-4">
                             <button onClick={() => setIsImportModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
-                            <button onClick={handleConfirmImport} disabled={importPreview.validRecords.length === 0} className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400"> Confirm Import </button>
+                            <button onClick={handleConfirmImport} disabled={importPreview.validRecords.length === 0} className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400">
+                                Confirm Import
+                            </button>
                         </div>
                     </div>
                 </Modal>

@@ -6,18 +6,29 @@ import { PlusIcon, WrenchScrewdriverIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { REPAIR_STATUS_OPTIONS } from '../constants';
 import { EditTarget } from '../App';
-import { useAuth } from '../contexts/AuthContext';
 
 const ContractorForm: React.FC<{onSave: (contractor: Omit<Contractor, 'id'>) => void; onCancel: () => void;}> = ({ onSave, onCancel }) => {
-    const [formData, setFormData] = useState({ name: '', contact: '', companyName: '', companyAddress: '', email: '', comments: '' });
+    const [formData, setFormData] = useState({
+        name: '',
+        contact: '',
+        companyName: '',
+        companyAddress: '',
+        email: '',
+        comments: '',
+    });
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({...prev, [name]: value}));
     };
+    
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (formData.name && formData.contact) onSave(formData);
-        else alert("Contact Person Name and Phone are required.");
+        if (formData.name && formData.contact) {
+            onSave(formData);
+        } else {
+            alert("Contact Person Name and Phone are required.");
+        }
     };
 
     return (
@@ -58,8 +69,11 @@ const RepairForm: React.FC<{
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        if (name === 'contractorId' && value === 'add_new') setIsAddingContractor(true);
-        else setFormData(prev => ({...prev, [name]: name === 'cost' ? parseFloat(value) || 0 : value }));
+        if (name === 'contractorId' && value === 'add_new') {
+            setIsAddingContractor(true);
+        } else {
+            setFormData(prev => ({...prev, [name]: name === 'cost' ? parseFloat(value) || 0 : value }));
+        }
     };
     
     const handleSaveNewContractor = (newContractorData: Omit<Contractor, 'id'>) => {
@@ -70,7 +84,10 @@ const RepairForm: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if(!formData.propertyId) return alert('Please select a property.');
+        if(!formData.propertyId) {
+            alert('Please select a property.');
+            return;
+        }
         const repairData = {
             ...formData,
             requestDate: repair?.requestDate || new Date().toISOString(),
@@ -80,7 +97,9 @@ const RepairForm: React.FC<{
         onSave(repair ? { ...repairData, id: repair.id } : repairData);
     };
 
-    if (isAddingContractor) return <ContractorForm onSave={handleSaveNewContractor} onCancel={() => setIsAddingContractor(false)} />
+    if (isAddingContractor) {
+        return <ContractorForm onSave={handleSaveNewContractor} onCancel={() => setIsAddingContractor(false)} />
+    }
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -133,42 +152,48 @@ interface RepairsScreenProps {
 
 const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, repairs, contractors, addRepair, updateRepair, addContractor, getPropertyById, getContractorById } = useAppContext();
-    const { isReadOnly } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined);
 
     const openAddModal = useCallback(() => {
-        if (properties.length === 0) return alert("You must add a property before logging a repair.");
+        if (properties.length === 0) {
+            alert("You must add a property before logging a repair.");
+            return;
+        }
         setSelectedRepair(undefined);
         setIsModalOpen(true);
     }, [properties.length]);
 
     const openEditModal = useCallback((repair: Repair) => {
-        if (!isReadOnly) {
-            setSelectedRepair(repair);
-            setIsModalOpen(true);
-        }
-    }, [isReadOnly]);
+        setSelectedRepair(repair);
+        setIsModalOpen(true);
+    }, []);
 
      useEffect(() => {
-        if (action === 'add' && !isReadOnly) {
+        if (action === 'add') {
           openAddModal();
           onActionDone();
         }
-    }, [action, onActionDone, openAddModal, isReadOnly]);
+    }, [action, onActionDone, openAddModal]);
 
     useEffect(() => {
-        if (editTarget && editTarget.type === 'repair' && !isReadOnly) {
+        if (editTarget && editTarget.type === 'repair') {
             const repairToEdit = repairs.find(r => r.id === editTarget.id);
-            if (repairToEdit) openEditModal(repairToEdit);
-            else alert("Could not find the repair record to edit.");
+            if (repairToEdit) {
+                openEditModal(repairToEdit);
+            } else {
+                alert("Could not find the repair record to edit.");
+            }
             onActionDone();
         }
-    }, [editTarget, onActionDone, repairs, openEditModal, isReadOnly]);
+    }, [editTarget, onActionDone, repairs, openEditModal]);
 
     const handleSave = (repairData: Omit<Repair, 'id'> | Repair) => {
-        if ('id' in repairData) updateRepair(repairData);
-        else addRepair(repairData);
+        if ('id' in repairData) {
+            updateRepair(repairData);
+        } else {
+            addRepair(repairData);
+        }
         setIsModalOpen(false);
         setSelectedRepair(undefined);
     };
@@ -191,7 +216,7 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Repairs</h2>
-                <button onClick={openAddModal} disabled={isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
+                <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors">
                     <PlusIcon className="w-5 h-5" />
                     Add Repair Request
                 </button>
