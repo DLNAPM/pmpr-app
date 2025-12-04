@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant } from '../types';
-import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon, ShareIcon } from '../components/Icons';
+import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { UTILITY_CATEGORIES } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
@@ -125,7 +125,7 @@ interface PropertiesScreenProps {
 
 const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDone }) => {
     const { properties, addProperty, updateProperty, deleteProperty } = useAppContext();
-    const { user, authStatus } = useAuth();
+    const { isReadOnly } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState<Property | undefined>(undefined);
 
@@ -140,11 +140,11 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
     };
 
     useEffect(() => {
-        if (action === 'add') {
+        if (action === 'add' && !isReadOnly) {
           openAddModal();
           onActionDone();
         }
-    }, [action, onActionDone, openAddModal]);
+    }, [action, onActionDone, openAddModal, isReadOnly]);
 
     const handleSave = (propertyData: Omit<Property, 'id' | 'userId'> | Property) => {
         if ('id' in propertyData) {
@@ -164,13 +164,11 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
         }
     };
     
-    const isOwner = (property: Property) => authStatus === 'guest' || (user && property.userId === user.id);
-
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Properties</h2>
-                <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors">
+                <button onClick={openAddModal} disabled={isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                     <PlusIcon className="w-5 h-5" />
                     Add Property
                 </button>
@@ -192,7 +190,7 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                   <span>{prop.address}</span>
                                 </a>
                             </div>
-                           {isOwner(prop) && (
+                           {!isReadOnly && (
                              <div className="flex items-center flex-shrink-0">
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); openEditModal(prop); }} 
@@ -222,11 +220,6 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                 </div>
                             ))}
                         </CardContent>
-                        {prop.ownerInfo && (
-                            <CardFooter>
-                                <p className="text-xs text-gray-500">Shared by: {prop.ownerInfo.name}</p>
-                            </CardFooter>
-                        )}
                     </Card>
                 ))}
                  {properties.length === 0 && (

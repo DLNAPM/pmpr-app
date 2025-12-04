@@ -10,6 +10,7 @@ import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import HelpModal from './components/HelpModal';
 import ShareDataModal from './screens/ShareDataModal';
+import DatabaseSelectionScreen from './screens/DatabaseSelectionScreen';
 
 type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting';
 export type ReportFilter = { 
@@ -26,10 +27,22 @@ const App: React.FC = () => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [initialReportFilter, setInitialReportFilter] = useState<ReportFilter | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
-  const { authStatus, user, logout } = useAuth();
+  const { authStatus, user, logout, isReadOnly, activeDbOwner } = useAuth();
 
-  if (authStatus === 'idle' || authStatus === 'loading') {
+  if (authStatus === 'idle') {
     return <LoginScreen />;
+  }
+
+  if (authStatus === 'selecting_db') {
+    return <DatabaseSelectionScreen />;
+  }
+
+  if (authStatus === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading application...</p>
+      </div>
+    );
   }
   
   const handleAction = (tab: Tab, actionName: string = 'add') => {
@@ -101,12 +114,17 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-gray-800 flex flex-col">
+      {isReadOnly && activeDbOwner && (
+        <div className="bg-yellow-100 border-b-2 border-yellow-200 text-center py-2 px-4 text-sm font-semibold text-yellow-800">
+          You are viewing {activeDbOwner.name}'s ({activeDbOwner.email}) database in Read-Only mode.
+        </div>
+      )}
       <header className="bg-white shadow-md sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-blue-800 tracking-tight">PMPR App</h1>
             <div className="flex items-center gap-4">
-               {authStatus === 'authenticated' && (
+               {authStatus === 'authenticated' && !isReadOnly && (
                  <button onClick={() => setIsShareModalOpen(true)} className="text-gray-500 hover:text-blue-600 transition-colors" aria-label="Share Data">
                      <ShareIcon className="w-6 h-6" />
                  </button>
@@ -160,7 +178,7 @@ const App: React.FC = () => {
         <NavItem tabName="contractors" label="Contractors" icon={<UsersIcon className="w-6 h-6" />} />
       </nav>
       <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
-      {authStatus === 'authenticated' && <ShareDataModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />}
+      {authStatus === 'authenticated' && !isReadOnly && <ShareDataModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />}
     </div>
   );
 };
