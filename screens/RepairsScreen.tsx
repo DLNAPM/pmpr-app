@@ -22,7 +22,7 @@ const RepairForm: React.FC<{ repair?: Repair; properties: Property[]; contractor
     const handleSaveNewContractor = (newContractorData: Omit<Contractor, 'id'| 'userId'>) => { const newContractor = onAddContractor(newContractorData); setFormData(prev => ({ ...prev, contractorId: newContractor.id })); setIsAddingContractor(false); };
     const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); if(!formData.propertyId) { alert('Please select a property.'); return; } const repairData = { ...formData, requestDate: repair?.requestDate || new Date().toISOString(), repairDate: formData.repairDate ? new Date(formData.repairDate).toISOString() : undefined, completionDate: formData.status === RepairStatus.COMPLETE && !repair?.completionDate ? new Date().toISOString() : repair?.completionDate, }; onSave(repair ? { ...repairData, id: repair.id, userId: repair.userId } : repairData); };
     if (isAddingContractor) { return <ContractorForm onSave={handleSaveNewContractor} onCancel={() => setIsAddingContractor(false)} /> }
-    return ( <form onSubmit={handleSubmit} className="space-y-4"> <select name="propertyId" value={formData.propertyId} onChange={handleChange} className="w-full p-2 border rounded"> <option value="">Select a Property</option> {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)} </select> <textarea name="description" value={formData.description} onChange={handleChange} placeholder="Description of issue" required rows={3} className="w-full p-2 border rounded" /> <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> <div> <label htmlFor="status" className="block text-sm font-medium text-gray-700">Status</label> <select id="status" name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded mt-1"> {REPAIR_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)} </select> </div> <div> <label htmlFor="repairDate" className="block text-sm font-medium text-gray-700">Repair Date</label> <input id="repairDate" type="date" name="repairDate" value={formData.repairDate} onChange={handleChange} className="w-full p-2 border rounded mt-1" /> </div> </div> <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> <div> <label htmlFor="cost" className="block text-sm font-medium text-gray-700">Cost</label> <input id="cost" type="number" name="cost" value={formData.cost} onChange={handleChange} placeholder="Cost" className="w-full p-2 border rounded mt-1" /> </div> <div> <label htmlFor="contractorId" className="block text-sm font-medium text-gray-700">Contractor</label> <select id="contractorId" name="contractorId" value={formData.contractorId} onChange={handleChange} className="w-full p-2 border rounded mt-1"> <option value="">Select a Contractor</option> {contractors.map(c => <option key={c.id} value={c.id}>{c.name} ({c.companyName || 'N/A'})</option>)} <option value="add_new" className="font-bold text-blue-600">-- Add New Contractor --</option> </select> </div> </div> <textarea name="notes" value={formData.notes} onChange={handleChange} placeholder="Notes" rows={2} className="w-full p-2 border rounded" /> <div className="flex justify-end gap-2 pt-4"> <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">Cancel</button> <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Save Repair</button> </div> </form> );
+    return ( <form onSubmit={handleSubmit} className="space-y-4"> <select name="propertyId" value={formData.propertyId} onChange={handleChange} className="w-full p-2 border rounded" disabled={!!repair}> <option value="">Select a Property</option> {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)} </select> <textarea name="description" value={formData.description} onChange={handleChange} placeholder="Description of issue" required rows={3} className="w-full p-2 border rounded" /> <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> <div> <label htmlFor="status" className="block text-sm font-medium text-gray-700">Status</label> <select id="status" name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded mt-1"> {REPAIR_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)} </select> </div> <div> <label htmlFor="repairDate" className="block text-sm font-medium text-gray-700">Repair Date</label> <input id="repairDate" type="date" name="repairDate" value={formData.repairDate} onChange={handleChange} className="w-full p-2 border rounded mt-1" /> </div> </div> <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> <div> <label htmlFor="cost" className="block text-sm font-medium text-gray-700">Cost</label> <input id="cost" type="number" name="cost" value={formData.cost} onChange={handleChange} placeholder="Cost" className="w-full p-2 border rounded mt-1" /> </div> <div> <label htmlFor="contractorId" className="block text-sm font-medium text-gray-700">Contractor</label> <select id="contractorId" name="contractorId" value={formData.contractorId} onChange={handleChange} className="w-full p-2 border rounded mt-1"> <option value="">Select a Contractor</option> {contractors.map(c => <option key={c.id} value={c.id}>{c.name} ({c.companyName || 'N/A'})</option>)} <option value="add_new" className="font-bold text-blue-600">-- Add New Contractor --</option> </select> </div> </div> <textarea name="notes" value={formData.notes} onChange={handleChange} placeholder="Notes" rows={2} className="w-full p-2 border rounded" /> <div className="flex justify-end gap-2 pt-4"> <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded">Cancel</button> <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Save Repair</button> </div> </form> );
 };
 
 interface RepairsScreenProps {
@@ -33,26 +33,55 @@ interface RepairsScreenProps {
 
 const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, repairs, contractors, addRepair, updateRepair, addContractor, getPropertyById, getContractorById } = useAppContext();
-    const { isReadOnly } = useAuth();
+    const { user, authStatus } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined);
+    
+    const userOwnedProperties = useMemo(() => {
+        if (authStatus === 'guest') return properties;
+        return properties.filter(p => user && p.userId === user.id);
+    }, [properties, user, authStatus]);
+
+    const isOwner = (item: Repair | Property) => {
+        if (authStatus === 'guest') return true;
+        if (!user) return false;
+        
+        if ('propertyId' in item) { // It's a Repair
+            const property = getPropertyById(item.propertyId);
+            return !!property && property.userId === user.id;
+        }
+        // It's a Property
+        return item.userId === user.id;
+    }
 
     const openAddModal = useCallback(() => {
-        if (isReadOnly || properties.length === 0) return;
+        if (userOwnedProperties.length === 0) return;
         setSelectedRepair(undefined);
         setIsModalOpen(true);
-    }, [isReadOnly, properties.length]);
+    }, [userOwnedProperties.length]);
 
     const openEditModal = useCallback((repair: Repair) => {
-        if(isReadOnly) return;
+        if(!isOwner(repair)) return;
         setSelectedRepair(repair);
         setIsModalOpen(true);
-    }, [isReadOnly]);
+    }, [isOwner]);
 
-     useEffect(() => { if (action === 'add' && !isReadOnly) { openAddModal(); onActionDone(); } }, [action, onActionDone, openAddModal, isReadOnly]);
-    useEffect(() => { if (editTarget && editTarget.type === 'repair' && !isReadOnly) { const repairToEdit = repairs.find(r => r.id === editTarget.id); if (repairToEdit) { openEditModal(repairToEdit); } onActionDone(); } }, [editTarget, onActionDone, repairs, openEditModal, isReadOnly]);
+    useEffect(() => { if (action === 'add') { openAddModal(); onActionDone(); } }, [action, onActionDone, openAddModal]);
+    useEffect(() => { if (editTarget && editTarget.type === 'repair') { const repairToEdit = repairs.find(r => r.id === editTarget.id); if (repairToEdit && isOwner(repairToEdit)) { openEditModal(repairToEdit); } onActionDone(); } }, [editTarget, onActionDone, repairs, openEditModal, isOwner]);
 
-    const handleSave = (repairData: Omit<Repair, 'id' | 'userId'> | Repair) => { if (isReadOnly) return; if ('id' in repairData) { updateRepair(repairData as Repair); } else { addRepair(repairData); } setIsModalOpen(false); setSelectedRepair(undefined); };
+    const handleSave = (repairData: Omit<Repair, 'id' | 'userId'> | Repair) => { 
+        const property = getPropertyById(repairData.propertyId);
+        if (!property || !isOwner(property)) return;
+
+        if ('id' in repairData) { 
+            updateRepair(repairData as Repair); 
+        } else { 
+            addRepair(repairData); 
+        } 
+        setIsModalOpen(false); 
+        setSelectedRepair(undefined); 
+    };
+
     const getStatusColor = (status: RepairStatus) => { switch (status) { case RepairStatus.COMPLETE: return 'bg-green-100 text-green-800'; case RepairStatus.IN_PROGRESS: return 'bg-blue-100 text-blue-800'; case RepairStatus.PENDING_SUPPLY: return 'bg-yellow-100 text-yellow-800'; case RepairStatus.PENDING_REPAIRMEN: return 'bg-red-100 text-red-800'; default: return 'bg-gray-100 text-gray-800'; } };
     const sortedRepairs = useMemo(() => [...repairs].sort((a,b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime()), [repairs]);
 
@@ -60,7 +89,7 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Repairs</h2>
-                <button onClick={openAddModal} disabled={isReadOnly || properties.length === 0} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                <button onClick={openAddModal} disabled={userOwnedProperties.length === 0} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                     <PlusIcon className="w-5 h-5" />
                     Add Repair Request
                 </button>
@@ -68,8 +97,9 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
             <div className="space-y-4">
                 {sortedRepairs.map(repair => {
                     const property = getPropertyById(repair.propertyId);
+                    const canEdit = isOwner(repair);
                     return (
-                        <Card key={repair.id} onClick={!isReadOnly ? () => openEditModal(repair) : undefined}>
+                        <Card key={repair.id} onClick={canEdit ? () => openEditModal(repair) : undefined}>
                             <CardContent>
                                 <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
                                     <div>
@@ -87,6 +117,11 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
                                     </div>
                                 </div>
                             </CardContent>
+                            {property?.ownerInfo && (
+                                <CardFooter>
+                                    <p className="text-xs text-gray-500">Shared by: {property.ownerInfo.name}</p>
+                                </CardFooter>
+                            )}
                             {repair.notes && ( <CardFooter> <p className="text-sm text-gray-600 italic whitespace-pre-wrap"><span className="font-semibold not-italic">Notes:</span> {repair.notes}</p> </CardFooter> )}
                         </Card>
                     )
@@ -95,12 +130,12 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
                      <div className="text-center py-10 text-gray-500">
                         <WrenchScrewdriverIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
                         <p>No repair requests found.</p>
-                        {!isReadOnly && properties.length > 0 && <p>Click "Add Repair Request" to create one.</p>}
+                        {userOwnedProperties.length > 0 && <p>Click "Add Repair Request" to create one.</p>}
                     </div>
                 )}
             </div>
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedRepair ? "Edit Repair Request" : "Add Repair Request"}>
-                <RepairForm repair={selectedRepair} properties={properties.filter(p => !isReadOnly)} contractors={contractors} onSave={handleSave} onCancel={() => setIsModalOpen(false)} onAddContractor={addContractor} />
+                <RepairForm repair={selectedRepair} properties={userOwnedProperties} contractors={contractors} onSave={handleSave} onCancel={() => setIsModalOpen(false)} onAddContractor={addContractor} />
             </Modal>
         </div>
     );

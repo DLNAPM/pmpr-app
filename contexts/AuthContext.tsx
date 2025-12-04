@@ -1,12 +1,10 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react';
 import { auth, db } from '../firebaseConfig';
-import { Share, DBOwner } from '../types';
 
 // Declare the global firebase object provided by the scripts in index.html
 declare const firebase: any;
 
 type AuthStatus = 'idle' | 'guest' | 'authenticated' | 'loading';
-type ViewMode = 'own' | 'shared';
 
 export interface User {
   id: string;
@@ -17,50 +15,21 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   authStatus: AuthStatus;
-  isReadOnly: boolean;
-  viewMode: ViewMode;
-  activeDbOwner: DBOwner | null;
-  sharedDbs: Share[];
-  isSelectingDb: boolean;
   signInWithGoogle: () => void;
   continueAsGuest: () => void;
   logout: () => void;
-  setActiveDbOwner: (owner: DBOwner | null) => void;
-  setSelectingDb: (isSelecting: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
-  const [activeDbOwner, setActiveDbOwnerState] = useState<DBOwner | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('own');
-  const [sharedDbs, setSharedDbs] = useState<Share[]>([]);
-  const [isSelectingDb, setSelectingDb] = useState(false);
-
-  const isReadOnly = useMemo(() => viewMode === 'shared', [viewMode]);
 
   const resetAuthState = useCallback(() => {
     setUser(null);
-    setActiveDbOwnerState(null);
-    setViewMode('own');
-    setSharedDbs([]);
-    setSelectingDb(false);
     sessionStorage.removeItem('pmpr_authStatus');
   }, []);
-
-  const setActiveDbOwner = useCallback((owner: DBOwner | null) => {
-    if (owner && user && owner.id !== user.id) {
-        setActiveDbOwnerState(owner);
-        setViewMode('shared');
-    } else {
-        setActiveDbOwnerState(user);
-        setViewMode('own');
-    }
-    setSelectingDb(false);
-  }, [user]);
 
   useEffect(() => {
     if (!auth) {
@@ -74,22 +43,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { uid, displayName, email } = firebaseUser;
         if (displayName && email) {
             const currentUser = { id: uid, name: displayName, email };
-            
             if (db) {
                 db.collection('users').doc(uid).set({ name: displayName, email }, { merge: true });
-                
-                // Check for shares
-                const sharesSnap = await db.collection('shares').where('viewerId', '==', uid).get();
-                const sharesData = sharesSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setSharedDbs(sharesData);
-
-                if (sharesData.length > 0) {
-                    setSelectingDb(true);
-                } else {
-                    setActiveDbOwner(currentUser);
-                }
-            } else {
-                 setActiveDbOwner(currentUser);
             }
             setUser(currentUser);
             setAuthStatus('authenticated');
@@ -106,7 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => unsubscribe();
-  }, [resetAuthState, setActiveDbOwner]);
+  }, [resetAuthState]);
   
 
   const signInWithGoogle = () => {
@@ -146,17 +101,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = useMemo(() => ({
     user,
     authStatus,
-    isReadOnly,
-    viewMode,
-    activeDbOwner,
-    sharedDbs,
-    isSelectingDb,
     signInWithGoogle,
     continueAsGuest,
     logout,
-    setActiveDbOwner,
-    setSelectingDb,
-  }), [user, authStatus, isReadOnly, viewMode, activeDbOwner, sharedDbs, isSelectingDb, setActiveDbOwner]);
+  }), [user, authStatus]);
 
   if (authStatus === 'loading') {
       return (

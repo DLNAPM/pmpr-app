@@ -172,184 +172,269 @@ interface PaymentsScreenProps {
 
 const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, payments, getPaymentsForProperty, addPayment, updatePayment, deletePayment } = useAppContext();
-    const { isReadOnly } = useAuth();
+    const { user, authStatus } = useAuth();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>(undefined);
 
     const selectedProperty = useMemo(() => properties.find(p => p.id === selectedPropertyId), [properties, selectedPropertyId]);
+    const isOwner = useMemo(() => {
+        if (!selectedProperty) return false;
+        return authStatus === 'guest' || (user && selectedProperty.userId === user.id);
+    }, [selectedProperty, user, authStatus]);
+
 
     const openAddModal = useCallback(() => {
-        if (isReadOnly || properties.length === 0 || !selectedProperty) return;
+        if (!isOwner || properties.length === 0 || !selectedProperty) return;
         setSelectedPayment(undefined);
         setIsModalOpen(true);
-    }, [properties.length, isReadOnly, selectedProperty]);
+    }, [properties.length, isOwner, selectedProperty]);
     
     const openEditModal = useCallback((payment: Payment) => {
-        if (isReadOnly) return;
+        if (!isOwner) return;
         setSelectedPayment(payment);
         setIsModalOpen(true);
-    }, [isReadOnly]);
+    }, [isOwner]);
 
     useEffect(() => {
-        if (action === 'add' && !isReadOnly) {
+        if (action === 'add' && isOwner) {
           openAddModal();
           onActionDone();
         }
-    }, [action, onActionDone, openAddModal, isReadOnly]);
+    }, [action, onActionDone, openAddModal, isOwner]);
 
     useEffect(() => {
-        if (editTarget && editTarget.type === 'payment' && !isReadOnly) {
+        if (editTarget && editTarget.type === 'payment') {
             const paymentToEdit = payments.find(p => p.id === editTarget.id);
             if (paymentToEdit) {
                 setSelectedPropertyId(paymentToEdit.propertyId);
-                // The modal will be opened by the effect below once selectedProperty is updated
             }
-            onActionDone();
         }
-    }, [editTarget, onActionDone, payments, isReadOnly]);
+    }, [editTarget, payments]);
 
     useEffect(() => {
-        if(editTarget && editTarget.type === 'payment' && selectedProperty && selectedProperty.id === editTarget.id) {
+        if(editTarget && editTarget.type === 'payment' && selectedProperty && selectedProperty.id === payments.find(p=>p.id === editTarget.id)?.propertyId) {
             const paymentToEdit = payments.find(p => p.id === editTarget.id);
-            if(paymentToEdit) openEditModal(paymentToEdit);
+            if(paymentToEdit) {
+                openEditModal(paymentToEdit);
+                onActionDone();
+            }
         }
-    }, [selectedProperty, editTarget, payments, openEditModal]);
+    }, [selectedProperty, editTarget, payments, openEditModal, onActionDone]);
     
     useEffect(() => {
         if (!selectedPropertyId && properties.length > 0) {
             setSelectedPropertyId(properties[0].id);
+        } else if (properties.length > 0 && !properties.some(p => p.id === selectedPropertyId)) {
+            setSelectedPropertyId(properties[0].id);
+        } else if (properties.length === 0) {
+            setSelectedPropertyId(null);
         }
     }, [properties, selectedPropertyId]);
     
-    const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a,b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
+    const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a, b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
 
     const handleSavePayment = (paymentData: Omit<Payment, 'id' | 'userId'> | Payment) => {
-        if(isReadOnly) return;
-        const existingPayment = payments.find(p => p.propertyId === paymentData.propertyId && p.year === paymentData.year && p.month === paymentData.month );
-        if ('id' in paymentData) {
+        if (!isOwner) return;
+        
+        const existingPaymentForMonth = payments.find(p => 
+            p.propertyId === propertyPayments[0]?.propertyId &&
+            p.year === paymentData.year &&
+            p.month === paymentData.month
+        );
+        
+        if (paymentData && 'id' in paymentData) {
             updatePayment(paymentData as Payment);
-        } else if (existingPayment) {
-            updatePayment({ ...existingPayment, ...paymentData });
+        } else if (existingPaymentForMonth && !paymentData.hasOwnProperty('id')) {
+            updatePayment({ ...existingPaymentForMonth, ...paymentData });
         } else {
-            addPayment(paymentData);
+            addPayment(paymentData as Omit<Payment, 'id' | 'userId'>);
         }
+        
         setIsModalOpen(false);
         setSelectedPayment(undefined);
     };
-    
+
     const handleDelete = (paymentId: string) => {
-        if(isReadOnly) return;
-        if (window.confirm("Are you sure you want to delete this payment record? This action cannot be undone.")) {
+        if (!isOwner) return;
+        const payment = payments.find(p => p.id === paymentId);
+        if (payment && window.confirm(`Are you sure you want to delete the payment record for ${MONTHS[payment.month - 1]} ${payment.year}?`)) {
             deletePayment(paymentId);
         }
     };
 
     const handleExportPdf = () => {
-        if (!selectedProperty || propertyPayments.length === 0) return;
+        if (!selectedProperty) return;
         const { jsPDF } = jspdf;
         const doc = new jsPDF();
-        (doc as any).autoTable({
-            head: [['Month/Year', 'Category', 'Bill Amount', 'Paid Amount', 'Balance', 'Notes']],
-            body: propertyPayments.flatMap(p => { const monthYear = `${MONTHS[p.month - 1]} ${p.year}`; const rentRow = [monthYear, 'Rent', `$${p.rentBillAmount.toFixed(2)}`, `$${p.rentPaidAmount.toFixed(2)}`, `$${(p.rentBillAmount - p.rentPaidAmount).toFixed(2)}`, p.notes || '']; const utilRows = p.utilities.map(u => [monthYear, u.category, `$${u.billAmount.toFixed(2)}`, `$${u.paidAmount.toFixed(2)}`, `$${(u.billAmount - u.paidAmount).toFixed(2)}`, '']); return [rentRow, ...utilRows]; }),
-            didDrawPage: (data: any) => { doc.setFontSize(20); doc.text(`Payment Report: ${selectedProperty.name}`, 14, 22); doc.setFontSize(10); doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30); },
-            startY: 35
+        
+        doc.setFontSize(18);
+        doc.text(`Payment Report: ${selectedProperty.name}`, 14, 22);
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Report Generated: ${new Date().toLocaleDateString()}`, 14, 30);
+
+        const tableColumn = ["Month", "Category", "Bill Amt", "Paid Amt", "Balance", "Notes"];
+        const tableRows: any[] = [];
+
+        propertyPayments.forEach(p => {
+            const rentRow = [
+                `${MONTHS[p.month-1]} ${p.year}`,
+                "Rent",
+                p.rentBillAmount.toFixed(2),
+                p.rentPaidAmount.toFixed(2),
+                (p.rentBillAmount - p.rentPaidAmount).toFixed(2),
+                p.notes || ''
+            ];
+            tableRows.push(rentRow);
+            p.utilities.forEach(u => {
+                 const utilRow = [
+                    "", // Don't repeat month
+                    u.category,
+                    u.billAmount.toFixed(2),
+                    u.paidAmount.toFixed(2),
+                    (u.billAmount - u.paidAmount).toFixed(2),
+                    "" // Notes are per-payment
+                ];
+                tableRows.push(utilRow);
+            });
         });
-        doc.save(`Payments-${selectedProperty.name.replace(/ /g,"_")}-${new Date().toISOString().split('T')[0]}.pdf`);
+
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 35,
+            headStyles: { fillColor: [22, 160, 133] },
+            columnStyles: { 5: { cellWidth: 50 } },
+        });
+
+        doc.save(`payments_${selectedProperty.name.replace(/\s/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
     };
 
-    const handleExportCsv = () => {
-        if (!selectedProperty || propertyPayments.length === 0) return;
+    const handleExportExcel = () => {
+        if (!selectedProperty) return;
+
         const headers = ['Month', 'Year', 'Category', 'Bill Amount', 'Paid Amount', 'Balance', 'Notes'];
-        const rows = propertyPayments.flatMap(p => { const escapeCsv = (str: string) => `"${str.replace(/"/g, '""')}"`; const rentRow = [MONTHS[p.month - 1], p.year, 'Rent', p.rentBillAmount.toFixed(2), p.rentPaidAmount.toFixed(2), (p.rentBillAmount - p.rentPaidAmount).toFixed(2), p.notes ? escapeCsv(p.notes) : ''].join(','); const utilRows = p.utilities.map(u => [MONTHS[p.month - 1], p.year, u.category, u.billAmount.toFixed(2), u.paidAmount.toFixed(2), (u.billAmount - u.paidAmount).toFixed(2), ''].join(',')); return [rentRow, ...utilRows]; });
-        const csvContent = [headers.join(','), ...rows].join('\n');
+        const rows = propertyPayments.flatMap(p => {
+            const baseRows = [
+                [MONTHS[p.month-1], p.year, 'Rent', p.rentBillAmount, p.rentPaidAmount, p.rentBillAmount - p.rentPaidAmount, p.notes || ''],
+            ];
+            const utilRows = p.utilities.map(u => [MONTHS[p.month-1], p.year, u.category, u.billAmount, u.paidAmount, u.billAmount - u.paidAmount, '']);
+            return [...baseRows, ...utilRows];
+        });
+
+        const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.setAttribute('href', URL.createObjectURL(blob));
-        link.setAttribute('download', `Payments-${selectedProperty.name.replace(/ /g,"_")}-${new Date().toISOString().split('T')[0]}.csv`);
+        link.setAttribute('download', `payments_${selectedProperty.name.replace(/\s/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
-    const getStatusInfo = (billed: number, paid: number) => { if (billed === 0 && paid === 0) return { text: 'Not Billed', color: 'bg-gray-100 text-gray-800' }; if (paid >= billed) return { text: 'Paid', color: 'bg-green-100 text-green-800' }; if (paid > 0) return { text: 'Partially Paid', color: 'bg-yellow-100 text-yellow-800' }; return { text: 'Unpaid', color: 'bg-red-100 text-red-800' }; };
-    
+
     return (
         <div>
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+            <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
                 <h2 className="text-2xl font-bold">Payments</h2>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <select value={selectedPropertyId || ''} onChange={(e) => setSelectedPropertyId(e.target.value)} className="p-2 border rounded-lg bg-white shadow-sm w-full sm:w-auto">
-                         {properties.length === 0 && <option>No properties available</option>}
-                        {properties.map(prop => <option key={prop.id} value={prop.id}>{prop.name}</option>)}
-                    </select>
-                    <button onClick={handleExportPdf} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <ArrowDownTrayIcon className="w-4 h-4" /> Export PDF
-                    </button>
-                    <button onClick={handleExportCsv} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <ArrowDownTrayIcon className="w-4 h-4" /> Export Excel
-                    </button>
-                    <button onClick={openAddModal} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
-                        <PlusIcon className="w-5 h-5" />
-                        Record
-                    </button>
-                </div>
+                {properties.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <select
+                            value={selectedPropertyId || ''}
+                            onChange={(e) => setSelectedPropertyId(e.target.value)}
+                            className="p-2 border rounded-md shadow-sm"
+                        >
+                            {properties.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}{p.ownerInfo ? ' (Shared)' : ''}</option>
+                            ))}
+                        </select>
+                         <button onClick={handleExportPdf} className="px-3 py-2 text-sm bg-white border rounded-md shadow-sm hover:bg-gray-50">Export PDF</button>
+                         <button onClick={handleExportExcel} className="px-3 py-2 text-sm bg-white border rounded-md shadow-sm hover:bg-gray-50">Export Excel</button>
+                         <button onClick={openAddModal} disabled={!isOwner} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                            <PlusIcon className="w-5 h-5" />
+                            Record Payment
+                        </button>
+                    </div>
+                )}
             </div>
 
             {selectedProperty ? (
                 <div className="space-y-4">
-                    {propertyPayments.map(payment => {
-                        const rentStatus = getStatusInfo(payment.rentBillAmount, payment.rentPaidAmount);
-                        return (
-                            <Card key={payment.id}>
-                                <CardHeader className="flex justify-between items-center">
-                                    <h3 className="font-bold text-lg">{MONTHS[payment.month - 1]} {payment.year}</h3>
-                                    {!isReadOnly && (
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => openEditModal(payment)} className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors" aria-label="Edit Payment">
-                                                <PencilSquareIcon className="w-5 h-5"/>
-                                            </button>
-                                            <button onClick={() => handleDelete(payment.id)} className="text-gray-400 hover:text-red-600 p-1 rounded-full transition-colors" aria-label="Delete Payment">
-                                                <TrashIcon className="w-5 h-5"/>
-                                            </button>
-                                        </div>
-                                    )}
-                                </CardHeader>
-                                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className={`p-3 rounded-lg ${rentStatus.color}`}>
-                                        <p className="font-semibold">Rent</p>
-                                        <p>Billed: ${payment.rentBillAmount.toFixed(2)}</p>
-                                        <p>Paid: ${payment.rentPaidAmount.toFixed(2)}</p>
-                                        <p>Status: <span className="font-bold">{rentStatus.text}</span></p>
+                    {propertyPayments.map(payment => (
+                        <Card key={payment.id}>
+                            <CardHeader className="flex justify-between items-center">
+                                <h3 className="font-bold text-lg">{MONTHS[payment.month - 1]} {payment.year}</h3>
+                                {isOwner && (
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => openEditModal(payment)} className="text-gray-400 hover:text-blue-600"><PencilSquareIcon className="w-5 h-5"/></button>
+                                        <button onClick={() => handleDelete(payment.id)} className="text-gray-400 hover:text-red-600"><TrashIcon className="w-5 h-5"/></button>
                                     </div>
-                                    <div className="space-y-2">
-                                        <p className="font-semibold">Utilities</p>
-                                        {payment.utilities.map(util => {
-                                            const utilStatus = getStatusInfo(util.billAmount, util.paidAmount);
-                                            return ( <div key={util.category} className="flex justify-between items-center text-sm"> <span>{util.category}: ${util.paidAmount.toFixed(2)} / ${util.billAmount.toFixed(2)}</span> <span className={`px-2 py-0.5 rounded-full text-xs ${utilStatus.color}`}>{utilStatus.text}</span> </div> )})}
-                                         {payment.utilities.length === 0 && <p className="text-xs text-gray-500">No utilities tracked for this property.</p>}
-                                    </div>
-                                </CardContent>
-                                {payment.notes && (
-                                    <CardFooter>
-                                        <p className="text-sm text-gray-600 italic whitespace-pre-wrap"><span className="font-semibold not-italic">Notes:</span> {payment.notes}</p>
-                                    </CardFooter>
                                 )}
-                            </Card>
-                        )
-                    })}
+                            </CardHeader>
+                            <CardContent>
+                                <ul className="divide-y divide-gray-200">
+                                    <li className="py-2 grid grid-cols-4 gap-2 font-semibold">
+                                        <span>Category</span>
+                                        <span className="text-right">Bill Amt</span>
+                                        <span className="text-right">Paid Amt</span>
+                                        <span className="text-right">Balance</span>
+                                    </li>
+                                    <li className="py-2 grid grid-cols-4 gap-2">
+                                        <span>Rent</span>
+                                        <span className="text-right">${payment.rentBillAmount.toFixed(2)}</span>
+                                        <span className="text-right text-green-600">${payment.rentPaidAmount.toFixed(2)}</span>
+                                        <span className={`text-right font-semibold ${(payment.rentBillAmount - payment.rentPaidAmount) > 0 ? 'text-red-600' : ''}`}>
+                                            ${(payment.rentBillAmount - payment.rentPaidAmount).toFixed(2)}
+                                        </span>
+                                    </li>
+                                    {payment.utilities.map(util => (
+                                        <li key={util.category} className="py-2 grid grid-cols-4 gap-2">
+                                            <span>{util.category}</span>
+                                            <span className="text-right">${util.billAmount.toFixed(2)}</span>
+                                            <span className="text-right text-green-600">${util.paidAmount.toFixed(2)}</span>
+                                            <span className={`text-right font-semibold ${(util.billAmount - util.paidAmount) > 0 ? 'text-red-600' : ''}`}>
+                                                ${(util.billAmount - util.paidAmount).toFixed(2)}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </CardContent>
+                            {payment.notes && (
+                                <CardFooter>
+                                    <p className="text-sm text-gray-600 italic whitespace-pre-wrap"><span className="font-semibold not-italic">Notes:</span> {payment.notes}</p>
+                                </CardFooter>
+                            )}
+                        </Card>
+                    ))}
                     {propertyPayments.length === 0 && (
                         <div className="text-center py-10 text-gray-500">
                             <CreditCardIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
-                            <p>No payment records for this property.</p>
-                            {!isReadOnly && <p>Click "Record" to add the first payment.</p>}
+                            <p>No payments recorded for this property.</p>
+                            {isOwner && <p>Click "Record Payment" to add one.</p>}
                         </div>
                     )}
                 </div>
-            ) : ( <div className="text-center py-10 text-gray-500"><p>Please select a property to view payments, or add a property first.</p></div> )}
-            {selectedProperty && (
-                <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedPayment ? "Edit Payment" : "Record Payment"}>
-                    <PaymentForm property={selectedProperty} payment={selectedPayment} allPaymentsForProperty={propertyPayments} onSave={handleSavePayment} onCancel={() => setIsModalOpen(false)} />
+            ) : (
+                <div className="text-center py-10 text-gray-500">
+                    <CreditCardIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
+                    <p>Select a property to view payments.</p>
+                </div>
+            )}
+
+            {isModalOpen && selectedProperty && (
+                <Modal 
+                    isOpen={isModalOpen} 
+                    onClose={() => setIsModalOpen(false)} 
+                    title={selectedPayment ? `Edit Payment for ${MONTHS[selectedPayment.month-1]} ${selectedPayment.year}` : 'Record New Payment'}
+                >
+                    <PaymentForm 
+                        property={selectedProperty}
+                        allPaymentsForProperty={propertyPayments}
+                        payment={selectedPayment} 
+                        onSave={handleSavePayment}
+                        onCancel={() => setIsModalOpen(false)}
+                    />
                 </Modal>
             )}
         </div>
