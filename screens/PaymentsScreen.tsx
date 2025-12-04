@@ -172,31 +172,37 @@ interface PaymentsScreenProps {
 
 const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, payments, getPaymentsForProperty, addPayment, updatePayment, deletePayment } = useAppContext();
-    const { isReadOnly } = useAuth();
+    const { user, authStatus } = useAuth();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>(undefined);
 
     const selectedProperty = useMemo(() => properties.find(p => p.id === selectedPropertyId), [properties, selectedPropertyId]);
 
+    const isOwner = useMemo(() => {
+        if (!selectedProperty) return false;
+        return authStatus === 'guest' || selectedProperty.userId === user?.id;
+    }, [selectedProperty, user, authStatus]);
+
+
     const openAddModal = useCallback(() => {
-        if (isReadOnly || properties.length === 0 || !selectedProperty) return;
+        if (!isOwner || properties.length === 0 || !selectedProperty) return;
         setSelectedPayment(undefined);
         setIsModalOpen(true);
-    }, [properties.length, isReadOnly, selectedProperty]);
+    }, [properties.length, isOwner, selectedProperty]);
     
     const openEditModal = useCallback((payment: Payment) => {
-        if (isReadOnly) return;
+        if (!isOwner) return;
         setSelectedPayment(payment);
         setIsModalOpen(true);
-    }, [isReadOnly]);
+    }, [isOwner]);
 
     useEffect(() => {
-        if (action === 'add' && !isReadOnly) {
+        if (action === 'add' && isOwner) {
           openAddModal();
           onActionDone();
         }
-    }, [action, onActionDone, openAddModal, isReadOnly]);
+    }, [action, onActionDone, openAddModal, isOwner]);
 
     useEffect(() => {
         if (editTarget && editTarget.type === 'payment') {
@@ -210,12 +216,12 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     useEffect(() => {
         if(editTarget && editTarget.type === 'payment' && selectedProperty && selectedProperty.id === payments.find(p=>p.id === editTarget.id)?.propertyId) {
             const paymentToEdit = payments.find(p => p.id === editTarget.id);
-            if(paymentToEdit && !isReadOnly) {
+            if(paymentToEdit && isOwner) {
                 openEditModal(paymentToEdit);
                 onActionDone();
             }
         }
-    }, [selectedProperty, editTarget, payments, openEditModal, onActionDone, isReadOnly]);
+    }, [selectedProperty, editTarget, payments, openEditModal, onActionDone, isOwner]);
     
     useEffect(() => {
         if (!selectedPropertyId && properties.length > 0) {
@@ -341,9 +347,9 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                                 <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
                         </select>
-                         <button onClick={handleExportPdf} disabled={isReadOnly} className="px-3 py-2 text-sm bg-white border rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed">Export PDF</button>
-                         <button onClick={handleExportExcel} disabled={isReadOnly} className="px-3 py-2 text-sm bg-white border rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed">Export Excel</button>
-                         <button onClick={openAddModal} disabled={isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                         <button onClick={handleExportPdf} className="px-3 py-2 text-sm bg-white border rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed">Export PDF</button>
+                         <button onClick={handleExportExcel} className="px-3 py-2 text-sm bg-white border rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed">Export Excel</button>
+                         <button onClick={openAddModal} disabled={!isOwner} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                             <PlusIcon className="w-5 h-5" />
                             Record Payment
                         </button>
@@ -357,7 +363,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                         <Card key={payment.id}>
                             <CardHeader className="flex justify-between items-center">
                                 <h3 className="font-bold text-lg">{MONTHS[payment.month - 1]} {payment.year}</h3>
-                                {!isReadOnly && (
+                                {isOwner && (
                                     <div className="flex items-center gap-2">
                                         <button onClick={() => openEditModal(payment)} className="text-gray-400 hover:text-blue-600"><PencilSquareIcon className="w-5 h-5"/></button>
                                         <button onClick={() => handleDelete(payment.id)} className="text-gray-400 hover:text-red-600"><TrashIcon className="w-5 h-5"/></button>
@@ -403,14 +409,14 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                         <div className="text-center py-10 text-gray-500">
                             <CreditCardIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
                             <p>No payments recorded for this property.</p>
-                            {!isReadOnly && <p>Click "Record Payment" to add one.</p>}
+                            {isOwner && <p>Click "Record Payment" to add one.</p>}
                         </div>
                     )}
                 </div>
             ) : (
                 <div className="text-center py-10 text-gray-500">
                     <CreditCardIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
-                    <p>Select a property to view payments.</p>
+                    <p>No properties available, or none selected.</p>
                 </div>
             )}
 

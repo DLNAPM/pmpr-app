@@ -33,23 +33,30 @@ interface RepairsScreenProps {
 
 const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, repairs, contractors, addRepair, updateRepair, addContractor, getPropertyById, getContractorById } = useAppContext();
-    const { isReadOnly } = useAuth();
+    const { user, authStatus } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined);
+
+    const isOwner = (itemUserId: string) => authStatus === 'guest' || itemUserId === user?.id;
+    const ownedProperties = useMemo(() => properties.filter(p => isOwner(p.userId)), [properties, user, authStatus]);
     
     const openAddModal = useCallback(() => {
-        if (properties.length === 0) return;
+        if (ownedProperties.length === 0) {
+            alert("You must own a property to add a repair request.");
+            return;
+        }
         setSelectedRepair(undefined);
         setIsModalOpen(true);
-    }, [properties.length]);
+    }, [ownedProperties.length]);
 
     const openEditModal = useCallback((repair: Repair) => {
+        if (!isOwner(repair.userId)) return;
         setSelectedRepair(repair);
         setIsModalOpen(true);
-    }, []);
+    }, [user, authStatus]);
 
-    useEffect(() => { if (action === 'add' && !isReadOnly) { openAddModal(); onActionDone(); } }, [action, onActionDone, openAddModal, isReadOnly]);
-    useEffect(() => { if (editTarget && editTarget.type === 'repair' && !isReadOnly) { const repairToEdit = repairs.find(r => r.id === editTarget.id); if (repairToEdit) { openEditModal(repairToEdit); } onActionDone(); } }, [editTarget, onActionDone, repairs, openEditModal, isReadOnly]);
+    useEffect(() => { if (action === 'add') { openAddModal(); onActionDone(); } }, [action, onActionDone, openAddModal]);
+    useEffect(() => { if (editTarget && editTarget.type === 'repair') { const repairToEdit = repairs.find(r => r.id === editTarget.id); if (repairToEdit && isOwner(repairToEdit.userId)) { openEditModal(repairToEdit); } onActionDone(); } }, [editTarget, onActionDone, repairs, openEditModal, user, authStatus]);
 
     const handleSave = (repairData: Omit<Repair, 'id' | 'userId'> | Repair) => { 
         if ('id' in repairData) { 
@@ -68,7 +75,7 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Repairs</h2>
-                <button onClick={openAddModal} disabled={isReadOnly || properties.length === 0} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                <button onClick={openAddModal} disabled={ownedProperties.length === 0} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                     <PlusIcon className="w-5 h-5" />
                     Add Repair Request
                 </button>
@@ -76,8 +83,9 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
             <div className="space-y-4">
                 {sortedRepairs.map(repair => {
                     const property = getPropertyById(repair.propertyId);
+                    const canEdit = isOwner(repair.userId);
                     return (
-                        <Card key={repair.id} onClick={!isReadOnly ? () => openEditModal(repair) : undefined}>
+                        <Card key={repair.id} onClick={canEdit ? () => openEditModal(repair) : undefined}>
                             <CardContent>
                                 <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
                                     <div>
@@ -103,12 +111,12 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
                      <div className="text-center py-10 text-gray-500">
                         <WrenchScrewdriverIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
                         <p>No repair requests found.</p>
-                        {!isReadOnly && properties.length > 0 && <p>Click "Add Repair Request" to create one.</p>}
+                        {ownedProperties.length > 0 && <p>Click "Add Repair Request" to create one.</p>}
                     </div>
                 )}
             </div>
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedRepair ? "Edit Repair Request" : "Add Repair Request"}>
-                <RepairForm repair={selectedRepair} properties={properties} contractors={contractors} onSave={handleSave} onCancel={() => setIsModalOpen(false)} onAddContractor={addContractor} />
+                <RepairForm repair={selectedRepair} properties={ownedProperties} contractors={contractors} onSave={handleSave} onCancel={() => setIsModalOpen(false)} onAddContractor={addContractor} />
             </Modal>
         </div>
     );
