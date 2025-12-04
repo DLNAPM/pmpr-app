@@ -1,10 +1,12 @@
-import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
-import { auth } from '../firebaseConfig';
+import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react';
+import { auth, db } from '../firebaseConfig';
+import { DBOwner, Share } from '../types';
 
 // Declare the global firebase object provided by the scripts in index.html
 declare const firebase: any;
 
-type AuthStatus = 'idle' | 'guest' | 'authenticated' | 'loading';
+type AuthStatus = 'idle' | 'guest' | 'authenticated' | 'loading' | 'selecting_db';
+type ViewMode = 'own' | 'shared';
 
 export interface User {
   id: string;
@@ -15,9 +17,16 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   authStatus: AuthStatus;
+  sharedDbs: DBOwner[];
+  activeDbOwner: DBOwner | null;
+  viewMode: ViewMode;
+  isReadOnly: boolean;
+  isOwner: boolean;
   signInWithGoogle: () => void;
   continueAsGuest: () => void;
   logout: () => void;
+  selectDb: (owner: DBOwner) => void;
+  resetView: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,6 +35,45 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
+  
+  // New state for sharing/viewing logic
+  const [sharedDbs, setSharedDbs] = useState<DBOwner[]>([]);
+  const [activeDbOwner, setActiveDbOwner] = useState<DBOwner | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('own');
+
+  const isReadOnly = useMemo(() => viewMode === 'shared', [viewMode]);
+  const isOwner = useMemo(() => activeDbOwner?.id === user?.id, [activeDbOwner, user]);
+
+  const resetAuthState = useCallback(() => {
+    setUser(null);
+    setSharedDbs([]);
+    setActiveDbOwner(null);
+    setViewMode('own');
+    sessionStorage.removeItem('pmpr_authStatus');
+  }, []);
+
+  const fetchSharedDbs = useCallback(async (currentUser: User) => {
+    if (!db) return;
+    try {
+        const sharesSnapshot = await db.collection('shares').where('viewerEmail', '==', currentUser.email).get();
+        const shares: DBOwner[] = sharesSnapshot.docs.map((doc: any) => {
+            const data = doc.data();
+            return { id: data.ownerId, name: data.ownerName, email: data.ownerEmail };
+        });
+        setSharedDbs(shares);
+
+        if (shares.length > 0) {
+            setAuthStatus('selecting_db');
+        } else {
+            setActiveDbOwner(currentUser);
+            setAuthStatus('authenticated');
+        }
+    } catch (error) {
+        console.error("Error fetching shared databases:", error);
+        setActiveDbOwner(currentUser); // Default to own DB on error
+        setAuthStatus('authenticated');
+    }
+  }, []);
 
   useEffect(() => {
     if (!auth) {
@@ -38,62 +86,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (firebaseUser) {
         const { uid, displayName, email } = firebaseUser;
         if (displayName && email) {
-            setUser({ id: uid, name: displayName, email });
-            setAuthStatus('authenticated');
+            const currentUser = { id: uid, name: displayName, email };
+            setUser(currentUser);
+            fetchSharedDbs(currentUser);
         } else {
             console.error("Firebase user is missing display name or email.");
-            setUser(null);
+            resetAuthState();
             setAuthStatus('idle');
         }
       } else {
+        resetAuthState();
         const storedStatus = sessionStorage.getItem('pmpr_authStatus') as AuthStatus;
-        if (storedStatus === 'guest') {
-            setAuthStatus('guest');
-        } else {
-            setUser(null);
-            setAuthStatus('idle');
-        }
+        setAuthStatus(storedStatus === 'guest' ? 'guest' : 'idle');
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [resetAuthState, fetchSharedDbs]);
+  
+  const selectDb = (owner: DBOwner) => {
+      setActiveDbOwner(owner);
+      if (user && owner.id === user.id) {
+          setViewMode('own');
+      } else {
+          setViewMode('shared');
+      }
+      setAuthStatus('authenticated');
+  };
 
   const signInWithGoogle = () => {
     if (!auth) {
-        console.error("Firebase is not configured. Cannot sign in with Google.");
-        alert("Google Sign-In is currently unavailable. Please contact the administrator.");
+        alert("Google Sign-In is currently unavailable.");
         return;
     }
-
     const provider = new firebase.auth.GoogleAuthProvider();
-    provider.setCustomParameters({
-      prompt: 'select_account'
-    });
+    provider.setCustomParameters({ prompt: 'select_account' });
     setAuthStatus('loading');
-    auth.signInWithPopup(provider)
-        .then((result) => {
-            if (result.user) {
-              const { uid, displayName, email } = result.user;
-              if (displayName && email) {
-                  setUser({ id: uid, name: displayName, email });
-                  setAuthStatus('authenticated');
-                  sessionStorage.removeItem('pmpr_authStatus');
-              }
-            }
-        })
-        .catch((error) => {
-            console.error("Authentication failed:", error);
-            alert(`Authentication failed: ${error.message}`);
-            setAuthStatus('idle');
-        });
+    auth.signInWithPopup(provider).catch((error: any) => {
+        console.error("Authentication failed:", error);
+        alert(`Authentication failed: ${error.message}`);
+        setAuthStatus('idle');
+    });
   };
 
   const continueAsGuest = () => {
-    if (auth && auth.currentUser) {
-        auth.signOut();
-    }
-    setUser(null);
+    if (auth && auth.currentUser) auth.signOut();
+    resetAuthState();
     setAuthStatus('guest');
     sessionStorage.setItem('pmpr_authStatus', 'guest');
   };
@@ -101,25 +139,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     if (auth) {
       auth.signOut().then(() => {
-        setUser(null);
+        resetAuthState();
         setAuthStatus('idle');
-        sessionStorage.removeItem('pmpr_authStatus');
       });
     } else {
-      // Handle guest logout
-      setUser(null);
+      resetAuthState();
       setAuthStatus('idle');
-      sessionStorage.removeItem('pmpr_authStatus');
     }
   };
+  
+  const resetView = () => {
+      if(user) fetchSharedDbs(user);
+  }
   
   const value = useMemo(() => ({
     user,
     authStatus,
+    sharedDbs,
+    activeDbOwner,
+    viewMode,
+    isReadOnly,
+    isOwner,
     signInWithGoogle,
     continueAsGuest,
     logout,
-  }), [user, authStatus]);
+    selectDb,
+    resetView
+  }), [user, authStatus, sharedDbs, activeDbOwner, viewMode, isReadOnly, isOwner, resetView]);
 
   if (authStatus === 'loading') {
       return (

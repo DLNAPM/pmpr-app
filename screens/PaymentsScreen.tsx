@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import { CreditCardIcon, PlusIcon, PencilSquareIcon, TrashIcon, ArrowDownTrayIcon } from '../components/Icons';
 import { MONTHS } from '../constants';
 import { EditTarget } from '../App';
+import { useAuth } from '../contexts/AuthContext';
 
 // Make jsPDF available from the global scope
 declare const jspdf: any;
@@ -25,7 +26,6 @@ const PaymentForm: React.FC<{
     const [rentPaidAmount, setRentPaidAmount] = useState(payment?.rentPaidAmount || 0);
     const [notes, setNotes] = useState(payment?.notes || '');
 
-    // Calculate previous balances first
     const previousBalances = useMemo(() => {
         const prevPayment = allPaymentsForProperty
           .filter(p => p.year < year || (p.year === year && p.month < month))
@@ -43,7 +43,10 @@ const PaymentForm: React.FC<{
         return { rent: rentBalance, utilities: utilsBalances, total };
     }, [year, month, allPaymentsForProperty]);
     
-    const [rentBillAmount, setRentBillAmount] = useState(payment?.rentBillAmount || (property.rentAmount + previousBalances.rent));
+    const [rentBillAmount, setRentBillAmount] = useState(() => {
+        if (payment?.rentBillAmount) return payment.rentBillAmount;
+        return property.rentAmount + previousBalances.rent;
+    });
 
     useEffect(() => {
         // Only auto-update bill amount for NEW payments when month/year changes
@@ -99,7 +102,6 @@ const PaymentForm: React.FC<{
                     <p className="font-semibold">
                         Total Balance Carried Forward: {formatCurrency(previousBalances.total)}
                     </p>
-                    <p>This amount is from the previous month's unpaid bills.</p>
                 </div>
             )}
             <div className="grid grid-cols-2 gap-4">
@@ -170,23 +172,22 @@ interface PaymentsScreenProps {
 
 const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, payments, getPaymentsForProperty, addPayment, updatePayment, deletePayment } = useAppContext();
+    const { isReadOnly } = useAuth();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>(undefined);
 
     const openAddModal = useCallback(() => {
-        if (properties.length > 0) {
-            setSelectedPayment(undefined);
-            setIsModalOpen(true);
-        } else {
-            alert("You must add a property before you can record a payment.");
-        }
-    }, [properties.length]);
+        if (isReadOnly || properties.length === 0) return;
+        setSelectedPayment(undefined);
+        setIsModalOpen(true);
+    }, [properties.length, isReadOnly]);
     
     const openEditModal = useCallback((payment: Payment) => {
+        if (isReadOnly) return;
         setSelectedPayment(payment);
         setIsModalOpen(true);
-    }, []);
+    }, [isReadOnly]);
 
     useEffect(() => {
         if (action === 'add') {
@@ -201,8 +202,6 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
             if (paymentToEdit) {
                 setSelectedPropertyId(paymentToEdit.propertyId);
                 openEditModal(paymentToEdit);
-            } else {
-                alert("Could not find the payment record to edit.");
             }
             onActionDone();
         }
@@ -218,107 +217,43 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     const propertyPayments = useMemo(() => selectedPropertyId ? getPaymentsForProperty(selectedPropertyId).sort((a,b) => b.year - a.year || b.month - a.month) : [], [selectedPropertyId, getPaymentsForProperty]);
 
     const handleSavePayment = (paymentData: Omit<Payment, 'id'> | Payment) => {
-        const existingPayment = payments.find(p =>
-            p.propertyId === paymentData.propertyId &&
-            p.year === paymentData.year &&
-            p.month === paymentData.month
-        );
-
+        if(isReadOnly) return;
+        const existingPayment = payments.find(p => p.propertyId === paymentData.propertyId && p.year === paymentData.year && p.month === paymentData.month );
         if ('id' in paymentData) {
             updatePayment(paymentData);
         } else if (existingPayment) {
-            // This is an edge case: adding a payment for a month that already exists.
-            // We should treat it as an update.
-            const mergedPayment = { ...existingPayment, ...paymentData };
-            updatePayment(mergedPayment);
+            updatePayment({ ...existingPayment, ...paymentData });
         } else {
             addPayment(paymentData);
         }
-
         setIsModalOpen(false);
         setSelectedPayment(undefined);
     };
     
     const handleDelete = (paymentId: string) => {
-        if (window.confirm("Are you sure you want to delete this payment record? This will update the balance for the following month. This action cannot be undone.")) {
+        if(isReadOnly) return;
+        if (window.confirm("Are you sure you want to delete this payment record? This action cannot be undone.")) {
             deletePayment(paymentId);
         }
     };
 
     const handleExportPdf = () => {
-        if (!selectedProperty || propertyPayments.length === 0) {
-            alert("No payments to export for this property.");
-            return;
-        }
-
+        if (!selectedProperty || propertyPayments.length === 0) return;
         const { jsPDF } = jspdf;
         const doc = new jsPDF();
         (doc as any).autoTable({
             head: [['Month/Year', 'Category', 'Bill Amount', 'Paid Amount', 'Balance', 'Notes']],
-            body: propertyPayments.flatMap(p => {
-                const monthYear = `${MONTHS[p.month - 1]} ${p.year}`;
-                const rentRow = [
-                    monthYear,
-                    'Rent',
-                    `$${p.rentBillAmount.toFixed(2)}`,
-                    `$${p.rentPaidAmount.toFixed(2)}`,
-                    `$${(p.rentBillAmount - p.rentPaidAmount).toFixed(2)}`,
-                    p.notes || ''
-                ];
-                const utilRows = p.utilities.map(u => [
-                    monthYear,
-                    u.category,
-                    `$${u.billAmount.toFixed(2)}`,
-                    `$${u.paidAmount.toFixed(2)}`,
-                    `$${(u.billAmount - u.paidAmount).toFixed(2)}`,
-                    '' // Notes only on rent row for simplicity
-                ]);
-                return [rentRow, ...utilRows];
-            }),
-            didDrawPage: (data: any) => {
-                doc.setFontSize(20);
-                doc.text(`Payment Report: ${selectedProperty.name}`, 14, 22);
-                doc.setFontSize(10);
-                doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
-            },
+            body: propertyPayments.flatMap(p => { const monthYear = `${MONTHS[p.month - 1]} ${p.year}`; const rentRow = [monthYear, 'Rent', `$${p.rentBillAmount.toFixed(2)}`, `$${p.rentPaidAmount.toFixed(2)}`, `$${(p.rentBillAmount - p.rentPaidAmount).toFixed(2)}`, p.notes || '']; const utilRows = p.utilities.map(u => [monthYear, u.category, `$${u.billAmount.toFixed(2)}`, `$${u.paidAmount.toFixed(2)}`, `$${(u.billAmount - u.paidAmount).toFixed(2)}`, '']); return [rentRow, ...utilRows]; }),
+            didDrawPage: (data: any) => { doc.setFontSize(20); doc.text(`Payment Report: ${selectedProperty.name}`, 14, 22); doc.setFontSize(10); doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30); },
             startY: 35
         });
-        
         doc.save(`Payments-${selectedProperty.name.replace(/ /g,"_")}-${new Date().toISOString().split('T')[0]}.pdf`);
     };
 
     const handleExportCsv = () => {
-        if (!selectedProperty || propertyPayments.length === 0) {
-            alert("No payments to export for this property.");
-            return;
-        }
-
+        if (!selectedProperty || propertyPayments.length === 0) return;
         const headers = ['Month', 'Year', 'Category', 'Bill Amount', 'Paid Amount', 'Balance', 'Notes'];
-        const rows = propertyPayments.flatMap(p => {
-            const escapeCsv = (str: string) => `"${str.replace(/"/g, '""')}"`;
-            const rentRow = [
-                MONTHS[p.month - 1],
-                p.year,
-                'Rent',
-                p.rentBillAmount.toFixed(2),
-                p.rentPaidAmount.toFixed(2),
-                (p.rentBillAmount - p.rentPaidAmount).toFixed(2),
-                p.notes ? escapeCsv(p.notes) : ''
-            ].join(',');
-
-            const utilRows = p.utilities.map(u => [
-                MONTHS[p.month - 1],
-                p.year,
-                u.category,
-                u.billAmount.toFixed(2),
-                u.paidAmount.toFixed(2),
-                (u.billAmount - u.paidAmount).toFixed(2),
-                ''
-            ].join(','));
-
-            return [rentRow, ...utilRows];
-        });
-
+        const rows = propertyPayments.flatMap(p => { const escapeCsv = (str: string) => `"${str.replace(/"/g, '""')}"`; const rentRow = [MONTHS[p.month - 1], p.year, 'Rent', p.rentBillAmount.toFixed(2), p.rentPaidAmount.toFixed(2), (p.rentBillAmount - p.rentPaidAmount).toFixed(2), p.notes ? escapeCsv(p.notes) : ''].join(','); const utilRows = p.utilities.map(u => [MONTHS[p.month - 1], p.year, u.category, u.billAmount.toFixed(2), u.paidAmount.toFixed(2), (u.billAmount - u.paidAmount).toFixed(2), ''].join(',')); return [rentRow, ...utilRows]; });
         const csvContent = [headers.join(','), ...rows].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
@@ -329,13 +264,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
         document.body.removeChild(link);
     };
 
-
-    const getStatusInfo = (billed: number, paid: number) => {
-        if (billed === 0 && paid === 0) return { text: 'Not Billed', color: 'bg-gray-100 text-gray-800' };
-        if (paid >= billed) return { text: 'Paid', color: 'bg-green-100 text-green-800' };
-        if (paid > 0) return { text: 'Partially Paid', color: 'bg-yellow-100 text-yellow-800' };
-        return { text: 'Unpaid', color: 'bg-red-100 text-red-800' };
-    };
+    const getStatusInfo = (billed: number, paid: number) => { if (billed === 0 && paid === 0) return { text: 'Not Billed', color: 'bg-gray-100 text-gray-800' }; if (paid >= billed) return { text: 'Paid', color: 'bg-green-100 text-green-800' }; if (paid > 0) return { text: 'Partially Paid', color: 'bg-yellow-100 text-yellow-800' }; return { text: 'Unpaid', color: 'bg-red-100 text-red-800' }; };
     
     return (
         <div>
@@ -344,20 +273,20 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                 <div className="flex items-center gap-2 flex-wrap">
                     <select value={selectedPropertyId || ''} onChange={(e) => setSelectedPropertyId(e.target.value)} className="p-2 border rounded-lg bg-white shadow-sm w-full sm:w-auto">
                          {properties.length === 0 && <option>No properties available</option>}
-                        {properties.map(prop => (
-                            <option key={prop.id} value={prop.id}>{prop.name}</option>
-                        ))}
+                        {properties.map(prop => <option key={prop.id} value={prop.id}>{prop.name}</option>)}
                     </select>
-                    <button onClick={handleExportPdf} disabled={!selectedProperty} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50">
+                    <button onClick={handleExportPdf} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                         <ArrowDownTrayIcon className="w-4 h-4" /> Export PDF
                     </button>
-                    <button onClick={handleExportCsv} disabled={!selectedProperty} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50">
+                    <button onClick={handleExportCsv} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                         <ArrowDownTrayIcon className="w-4 h-4" /> Export Excel
                     </button>
-                    <button onClick={openAddModal} disabled={!selectedProperty} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
-                        <PlusIcon className="w-5 h-5" />
-                        Record
-                    </button>
+                    {!isReadOnly && (
+                        <button onClick={openAddModal} disabled={!selectedProperty} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                            <PlusIcon className="w-5 h-5" />
+                            Record
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -369,22 +298,16 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                             <Card key={payment.id}>
                                 <CardHeader className="flex justify-between items-center">
                                     <h3 className="font-bold text-lg">{MONTHS[payment.month - 1]} {payment.year}</h3>
-                                    <div className="flex items-center gap-2">
-                                        <button 
-                                            onClick={() => openEditModal(payment)}
-                                            className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors"
-                                            aria-label="Edit Payment"
-                                        >
-                                            <PencilSquareIcon className="w-5 h-5"/>
-                                        </button>
-                                        <button 
-                                            onClick={() => handleDelete(payment.id)}
-                                            className="text-gray-400 hover:text-red-600 p-1 rounded-full transition-colors"
-                                            aria-label="Delete Payment"
-                                        >
-                                            <TrashIcon className="w-5 h-5"/>
-                                        </button>
-                                    </div>
+                                    {!isReadOnly && (
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => openEditModal(payment)} className="text-gray-400 hover:text-blue-600 p-1 rounded-full transition-colors" aria-label="Edit Payment">
+                                                <PencilSquareIcon className="w-5 h-5"/>
+                                            </button>
+                                            <button onClick={() => handleDelete(payment.id)} className="text-gray-400 hover:text-red-600 p-1 rounded-full transition-colors" aria-label="Delete Payment">
+                                                <TrashIcon className="w-5 h-5"/>
+                                            </button>
+                                        </div>
+                                    )}
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className={`p-3 rounded-lg ${rentStatus.color}`}>
@@ -397,14 +320,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                                         <p className="font-semibold">Utilities</p>
                                         {payment.utilities.map(util => {
                                             const utilStatus = getStatusInfo(util.billAmount, util.paidAmount);
-                                            return (
-                                            <div key={util.category} className="flex justify-between items-center text-sm">
-                                                <span>{util.category}: ${util.paidAmount.toFixed(2)} / ${util.billAmount.toFixed(2)}</span>
-                                                <span className={`px-2 py-0.5 rounded-full text-xs ${utilStatus.color}`}>
-                                                    {utilStatus.text}
-                                                </span>
-                                            </div>
-                                        )})}
+                                            return ( <div key={util.category} className="flex justify-between items-center text-sm"> <span>{util.category}: ${util.paidAmount.toFixed(2)} / ${util.billAmount.toFixed(2)}</span> <span className={`px-2 py-0.5 rounded-full text-xs ${utilStatus.color}`}>{utilStatus.text}</span> </div> )})}
                                          {payment.utilities.length === 0 && <p className="text-xs text-gray-500">No utilities tracked for this property.</p>}
                                     </div>
                                 </CardContent>
@@ -420,25 +336,14 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                         <div className="text-center py-10 text-gray-500">
                             <CreditCardIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
                             <p>No payment records for this property.</p>
-                            <p>Click "Record" to add the first payment.</p>
+                            {!isReadOnly && <p>Click "Record" to add the first payment.</p>}
                         </div>
                     )}
                 </div>
-            ) : (
-                <div className="text-center py-10 text-gray-500">
-                    <p>Please select a property to view payments, or add a property first.</p>
-                </div>
-            )}
-
+            ) : ( <div className="text-center py-10 text-gray-500"><p>Please select a property to view payments, or add a property first.</p></div> )}
             {selectedProperty && (
                 <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedPayment ? "Edit Payment" : "Record Payment"}>
-                    <PaymentForm 
-                        property={selectedProperty}
-                        payment={selectedPayment}
-                        allPaymentsForProperty={propertyPayments}
-                        onSave={handleSavePayment}
-                        onCancel={() => setIsModalOpen(false)}
-                    />
+                    <PaymentForm property={selectedProperty} payment={selectedPayment} allPaymentsForProperty={propertyPayments} onSave={handleSavePayment} onCancel={() => setIsModalOpen(false)} />
                 </Modal>
             )}
         </div>
