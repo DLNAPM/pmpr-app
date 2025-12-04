@@ -17,17 +17,15 @@ interface ImportPreview { validRecords: Omit<Contractor, 'id' | 'userId'>[]; err
 
 const ContractorsScreen: React.FC = () => {
     const { contractors, addContractor, updateContractor } = useAppContext();
-    const { user, authStatus } = useAuth();
+    const { isReadOnly } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedContractor, setSelectedContractor] = useState<Contractor | undefined>(undefined);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const isOwner = (itemUserId: string) => authStatus === 'guest' || itemUserId === user?.id;
-
-    const openAddModal = () => { setSelectedContractor(undefined); setIsModalOpen(true); };
-    const openEditModal = (contractor: Contractor) => { setSelectedContractor(contractor); setIsModalOpen(true); };
+    const openAddModal = () => { if (!isReadOnly) { setSelectedContractor(undefined); setIsModalOpen(true); } };
+    const openEditModal = (contractor: Contractor) => { if (!isReadOnly) { setSelectedContractor(contractor); setIsModalOpen(true); } };
     const handleSave = (contractorData: Omit<Contractor, 'id' | 'userId'> | Contractor) => { if ('id' in contractorData) { updateContractor(contractorData); } else { addContractor(contractorData); } setIsModalOpen(false); setSelectedContractor(undefined); };
     
     const handleExport = () => { 
@@ -51,12 +49,12 @@ const ContractorsScreen: React.FC = () => {
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Contractors</h2>
                  <div className="flex gap-2">
-                    <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed"><ArrowUpTrayIcon className="w-4 h-4" />Import</button>
+                    <button onClick={() => fileInputRef.current?.click()} disabled={isReadOnly} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed"><ArrowUpTrayIcon className="w-4 h-4" />Import</button>
                     <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".csv" className="hidden"/>
-                    <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed">
+                    <button onClick={handleExport} disabled={isReadOnly} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed">
                         <ArrowDownTrayIcon className="w-4 h-4" /> Export
                     </button>
-                    <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                    <button onClick={openAddModal} disabled={isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                         <PlusIcon className="w-5 h-5" /> Add Contractor
                     </button>
                 </div>
@@ -74,7 +72,7 @@ const ContractorsScreen: React.FC = () => {
                                     {c.companyAddress && <p className="text-gray-600 text-sm">{c.companyAddress}</p>}
                                     {c.comments && <p className="text-sm text-gray-500 italic mt-2 p-2 bg-slate-50 rounded-md whitespace-pre-wrap">{c.comments}</p>}
                                 </div>
-                                {isOwner(c.userId) && (
+                                {!isReadOnly && (
                                 <button onClick={() => openEditModal(c)} className="text-gray-400 hover:text-blue-600 p-2 rounded-full transition-colors flex-shrink-0" aria-label="Edit Contractor">
                                     <PencilSquareIcon className="w-5 h-5"/>
                                 </button>
@@ -88,7 +86,7 @@ const ContractorsScreen: React.FC = () => {
                     <div className="text-center py-10 text-gray-500">
                         <UsersIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
                         <p>No contractors found.</p>
-                        <p>Click "Add Contractor" to create one.</p>
+                        {!isReadOnly && <p>Click "Add Contractor" to create one.</p>}
                     </div>
                 )}
             </div>
