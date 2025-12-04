@@ -125,29 +125,32 @@ interface PropertiesScreenProps {
 
 const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDone }) => {
     const { properties, addProperty, updateProperty, deleteProperty } = useAppContext();
-    const { user } = useAuth();
+    const { isReadOnly } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState<Property | undefined>(undefined);
 
     const openAddModal = useCallback(() => {
+        if (isReadOnly) return;
         setSelectedProperty(undefined);
         setIsModalOpen(true);
-    }, []);
+    }, [isReadOnly]);
 
     const openEditModal = (property: Property) => {
+        if (isReadOnly) return;
         setSelectedProperty(property);
         setIsModalOpen(true);
     };
 
     useEffect(() => {
-        if (action === 'add') {
+        if (action === 'add' && !isReadOnly) {
           openAddModal();
           onActionDone();
         }
-    }, [action, onActionDone, openAddModal]);
+    }, [action, onActionDone, openAddModal, isReadOnly]);
 
 
     const handleSave = (propertyData: Omit<Property, 'id' | 'userId'> | Property) => {
+        if (isReadOnly) return;
         if ('id' in propertyData) {
             updateProperty(propertyData as Property);
         } else {
@@ -158,6 +161,7 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
     };
 
     const handleDelete = (propertyId: string) => {
+        if (isReadOnly) return;
         const property = properties.find(p => p.id === propertyId);
         if (!property) return;
         if (window.confirm(`Are you sure you want to delete "${property.name}"? This will also delete ALL associated payment and repair records. This action cannot be undone.`)) {
@@ -165,14 +169,11 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
         }
     };
 
-    const isOwned = (property: Property) => property.userId === user?.id;
-
-
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">Properties</h2>
-                <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors">
+                <button onClick={openAddModal} disabled={isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                     <PlusIcon className="w-5 h-5" />
                     Add Property
                 </button>
@@ -194,7 +195,7 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                   <span>{prop.address}</span>
                                 </a>
                             </div>
-                           {isOwned(prop) && (
+                           {!isReadOnly && (
                              <div className="flex items-center flex-shrink-0">
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); openEditModal(prop); }} 
@@ -224,11 +225,6 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                 </div>
                             ))}
                         </CardContent>
-                        {prop.ownerInfo && (
-                            <CardFooter>
-                                <p className="text-xs text-gray-500">Shared by: {prop.ownerInfo.name}</p>
-                            </CardFooter>
-                        )}
                     </Card>
                 ))}
                  {properties.length === 0 && (

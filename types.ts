@@ -67,11 +67,6 @@ export interface Property {
   rentAmount: number; // This is the standard monthly rent bill amount
   utilitiesToTrack: string[];
   userId: string;
-  // For UI purposes on shared properties
-  ownerInfo?: {
-    name: string;
-    email: string;
-  }
 }
 
 export interface DBOwner {
@@ -80,7 +75,7 @@ export interface DBOwner {
   email: string;
 }
 
-// Updated Share to be per-property
+// Reverted to simple, full-database share
 export interface Share {
   id: string;
   ownerId: string;
@@ -88,6 +83,4 @@ export interface Share {
   ownerEmail: string;
   viewerEmail: string;
   viewerId?: string;
-  propertyId: string;
-  propertyName: string;
 }

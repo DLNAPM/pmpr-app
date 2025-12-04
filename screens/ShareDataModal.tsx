@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '../components/Modal';
 import { useAppContext } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Share, Property } from '../types';
+import { Share } from '../types';
 import { TrashIcon } from '../components/Icons';
 
 interface ShareDataModalProps {
@@ -12,15 +12,12 @@ interface ShareDataModalProps {
 
 const ShareDataModal: React.FC<ShareDataModalProps> = ({ isOpen, onClose }) => {
   const { user } = useAuth();
-  const { properties, getSharesByOwner, findUserByEmail, addShare, deleteShare } = useAppContext();
+  const { getSharesByOwner, findUserByEmail, addShare, deleteShare } = useAppContext();
   
   const [shares, setShares] = useState<Share[]>([]);
   const [viewerEmail, setViewerEmail] = useState('');
-  const [selectedProperties, setSelectedProperties] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-
-  const userOwnedProperties = useMemo(() => properties.filter(p => p.userId === user?.id), [properties, user]);
 
   useEffect(() => {
     if (isOpen) {
@@ -32,21 +29,19 @@ const ShareDataModal: React.FC<ShareDataModalProps> = ({ isOpen, onClose }) => {
     }
   }, [isOpen, getSharesByOwner]);
 
-  const handlePropertyToggle = (propertyId: string) => {
-    setSelectedProperties(prev => 
-      prev.includes(propertyId) ? prev.filter(id => id !== propertyId) : [...prev, propertyId]
-    );
-  };
-
   const handleShare = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!user || !viewerEmail || selectedProperties.length === 0) {
-        setError("Please enter an email and select at least one property to share.");
+    if (!user || !viewerEmail) {
+        setError("Please enter a user's email to share with.");
         return;
     }
     if (viewerEmail.toLowerCase() === user.email.toLowerCase()) {
-        setError("You cannot share properties with yourself.");
+        setError("You cannot share your database with yourself.");
+        return;
+    }
+     if (shares.some(s => s.viewerEmail.toLowerCase() === viewerEmail.toLowerCase())) {
+        setError("You are already sharing your database with this user.");
         return;
     }
 
@@ -57,31 +52,19 @@ const ShareDataModal: React.FC<ShareDataModalProps> = ({ isOpen, onClose }) => {
     }
 
     try {
-        for (const propId of selectedProperties) {
-            const property = userOwnedProperties.find(p => p.id === propId);
-            if (!property) continue;
-            
-            // Check if this specific property is already shared with this user
-            const alreadyShared = shares.some(s => s.viewerEmail.toLowerCase() === viewerEmail.toLowerCase() && s.propertyId === propId);
-            if (alreadyShared) continue;
-
-            await addShare({
-                ownerId: user.id,
-                ownerName: user.name,
-                ownerEmail: user.email,
-                viewerEmail: viewer.email,
-                viewerId: viewer.id,
-                propertyId: propId,
-                propertyName: property.name,
-            });
-        }
+        await addShare({
+            ownerId: user.id,
+            ownerName: user.name,
+            ownerEmail: user.email,
+            viewerEmail: viewer.email,
+            viewerId: viewer.id,
+        });
         const updatedShares = await getSharesByOwner();
         setShares(updatedShares);
         setViewerEmail('');
-        setSelectedProperties([]);
     } catch (err) {
         console.error("Failed to add share:", err);
-        setError("An error occurred. Please try again.");
+        setError("An error occurred while sharing. Please try again.");
     }
   };
 
@@ -95,37 +78,16 @@ const ShareDataModal: React.FC<ShareDataModalProps> = ({ isOpen, onClose }) => {
       }
   };
 
-  const groupedShares = useMemo(() => {
-    return shares.reduce((acc, share) => {
-      if(!acc[share.viewerEmail]) {
-        acc[share.viewerEmail] = [];
-      }
-      acc[share.viewerEmail].push(share);
-      return acc;
-    }, {} as Record<string, Share[]>);
-  }, [shares]);
-
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Share Properties (Read-Only)">
+    <Modal isOpen={isOpen} onClose={onClose} title="Share My Database (Read-Only)">
       <div className="space-y-6">
         <div>
           <p className="text-sm text-gray-600 mb-4">
-            Select properties and invite others to view them in a secure, read-only mode.
+            Invite others to view your entire database in a secure, read-only mode.
           </p>
           <form onSubmit={handleShare} className="space-y-4 p-4 border rounded-lg bg-slate-50">
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">1. Select Properties to Share</label>
-                <div className="max-h-40 overflow-y-auto space-y-1 p-2 border rounded-md bg-white">
-                    {userOwnedProperties.map(prop => (
-                        <label key={prop.id} className="flex items-center p-1.5 rounded hover:bg-slate-100">
-                            <input type="checkbox" checked={selectedProperties.includes(prop.id)} onChange={() => handlePropertyToggle(prop.id)} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                            <span className="ml-2 text-sm text-gray-800">{prop.name}</span>
-                        </label>
-                    ))}
-                </div>
-            </div>
              <div>
-                <label htmlFor="viewerEmail" className="block text-sm font-medium text-gray-700 mb-1">2. Enter User's Google Email</label>
+                <label htmlFor="viewerEmail" className="block text-sm font-medium text-gray-700 mb-1">Enter User's Google Email</label>
                 <div className="flex items-center gap-2">
                     <input id="viewerEmail" type="email" value={viewerEmail} onChange={(e) => setViewerEmail(e.target.value)} placeholder="viewer@example.com" required className="flex-grow p-2 border rounded-md" />
                     <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
@@ -138,26 +100,19 @@ const ShareDataModal: React.FC<ShareDataModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div>
-          <h3 className="font-semibold text-gray-800 mb-2">Currently Shared:</h3>
-          {isLoading ? ( <p>Loading...</p> ) : Object.keys(groupedShares).length > 0 ? (
-            <div className="space-y-3 max-h-60 overflow-y-auto">
-              {Object.entries(groupedShares).map(([email, shareList]) => (
-                <div key={email} className="p-3 bg-slate-50 rounded-md">
-                    <p className="font-semibold text-gray-700">{email}</p>
-                    <ul className="mt-1 space-y-1 pl-2">
-                        {shareList.map(share => (
-                            <li key={share.id} className="flex justify-between items-center text-sm">
-                                <span className="text-gray-600">&bull; {share.propertyName}</span>
-                                <button onClick={() => handleRevoke(share.id)} className="text-red-400 hover:text-red-600" aria-label={`Revoke access for ${share.propertyName}`}>
-                                    <TrashIcon className="w-4 h-4"/>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
+          <h3 className="font-semibold text-gray-800 mb-2">Currently Shared With:</h3>
+          {isLoading ? ( <p>Loading...</p> ) : shares.length > 0 ? (
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {shares.map(share => (
+                <div key={share.id} className="flex justify-between items-center p-2 bg-slate-50 rounded-md">
+                    <p className="font-medium text-gray-700">{share.viewerEmail}</p>
+                    <button onClick={() => handleRevoke(share.id)} className="text-red-400 hover:text-red-600" aria-label={`Revoke access for ${share.viewerEmail}`}>
+                        <TrashIcon className="w-5 h-5"/>
+                    </button>
                 </div>
               ))}
             </div>
-          ) : ( <p className="text-gray-500 text-sm">You haven't shared any properties yet.</p> )}
+          ) : ( <p className="text-gray-500 text-sm">You haven't shared your database with anyone yet.</p> )}
         </div>
         
         <div className="pt-4 text-right">

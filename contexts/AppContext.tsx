@@ -10,9 +10,6 @@ const prevMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
 const prevMonth = prevMonthDate.getMonth() + 1;
 const prevMonthYear = prevMonthDate.getFullYear();
 
-// Fix: Declare firebase as a global constant to resolve TypeScript errors when accessing it.
-declare const firebase: any;
-
 const initialGuestData = {
     properties: [ { id: 'prop1', name: 'Sunset Apartments, Unit 101', address: '123 Ocean View Dr, Miami, FL', tenants: [{id: 't1', name: 'John Doe', phone: '555-1234', email: 'john.doe@email.com'}], leaseStart: '2023-08-01T00:00:00.000Z', leaseEnd: '2024-07-31T00:00:00.000Z', securityDeposit: 1500, rentAmount: 1500, utilitiesToTrack: ['Water', 'Electricity', 'Internet'], userId: 'guest_user' }, ],
     payments: [ { id: 'payment1', propertyId: 'prop1', month: prevMonth, year: prevMonthYear, rentBillAmount: 1500, rentPaidAmount: 1400, utilities: [ { category: 'Water', billAmount: 50, paidAmount: 50 }, { category: 'Electricity', billAmount: 85, paidAmount: 85 }, { category: 'Internet', billAmount: 60, paidAmount: 0 }, ], notes: 'Paid via check #123. Tenant will pay remaining internet bill next month.', paymentDate: prevMonthDate.toISOString(), userId: 'guest_user' } ],
@@ -100,68 +97,64 @@ const GuestDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 };
 
 const AuthenticatedDataProvider: React.FC<{ user: User, children: React.ReactNode }> = ({ user, children }) => {
+    const { activeDbOwner, isReadOnly } = useAuth();
     const [properties, setProperties] = useState<Property[]>([]);
     const [payments, setPayments] = useState<Payment[]>([]);
     const [repairs, setRepairs] = useState<Repair[]>([]);
     const [contractors, setContractors] = useState<Contractor[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
+    const ownerId = activeDbOwner?.id || user.id;
+
     useEffect(() => {
-      if (!db || !user) { setIsLoading(false); return; }
-      setIsLoading(true);
-  
-      const ownDataUnsubs = ['properties', 'payments', 'repairs', 'contractors'].map((collectionName) => {
-        const setters: Record<string, React.Dispatch<React.SetStateAction<any[]>>> = { properties: setProperties, payments: setPayments, repairs: setRepairs, contractors: setContractors };
-        return db.collection(collectionName).where('userId', '==', user.id).onSnapshot((snapshot: any) => {
-          const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-          setters[collectionName](prev => [...(prev?.filter((p: any) => p.userId !== user.id) || []), ...data]);
-        });
-      });
-  
-      const sharesUnsub = db.collection('shares').where('viewerId', '==', user.id).onSnapshot(async (sharesSnapshot: any) => {
-        const shares = sharesSnapshot.docs.map((doc: any) => doc.data());
-        const sharedPropertyIds = shares.map((s: any) => s.propertyId);
-        
-        // Clear previously loaded shared properties
-        setProperties(prev => prev.filter(p => p.userId === user.id));
-
-        if (sharedPropertyIds.length > 0) {
-          const sharedPropsQuery = await db.collection('properties').where(firebase.firestore.FieldPath.documentId(), 'in', sharedPropertyIds).get();
-          const sharedProps = sharedPropsQuery.docs.map((doc: any) => {
-              const data = doc.data();
-              const shareInfo = shares.find(s => s.propertyId === doc.id);
-              return { id: doc.id, ...data, ownerInfo: { name: shareInfo.ownerName, email: shareInfo.ownerEmail } };
-          });
-          setProperties(prev => [...prev, ...sharedProps]);
+        if (!db || !ownerId) {
+            setIsLoading(false);
+            return;
         }
-        setIsLoading(false);
-      });
-  
-      return () => { ownDataUnsubs.forEach(unsub => unsub()); sharesUnsub(); };
-    }, [user]);
+        setIsLoading(true);
 
-    const checkOwnership = (item: { userId: string }) => item.userId === user.id;
+        const collections = ['properties', 'payments', 'repairs', 'contractors'];
+        const setters: Record<string, React.Dispatch<React.SetStateAction<any[]>>> = {
+            properties: setProperties,
+            payments: setPayments,
+            repairs: setRepairs,
+            contractors: setContractors
+        };
 
-    const addProperty = (p: Omit<Property, 'id' | 'userId'>) => { db.collection('properties').add({ ...p, userId: user.id }); };
-    const updateProperty = (up: Property) => { if(!checkOwnership(up)) return; const { id, ...data } = up; db.collection('properties').doc(id).set(data, { merge: true }); };
-    const deleteProperty = async (id: string) => { const prop = properties.find(p=>p.id === id); if(!prop || !checkOwnership(prop)) return; if (!db) return; const batch = db.batch(); const pQuery = await db.collection('payments').where('propertyId', '==', id).get(); pQuery.forEach((doc: any) => batch.delete(doc.ref)); const rQuery = await db.collection('repairs').where('propertyId', '==', id).get(); rQuery.forEach((doc: any) => batch.delete(doc.ref)); const propRef = db.collection('properties').doc(id); batch.delete(propRef); await batch.commit(); };
-    const updatePaymentFirestore = (up: Payment) => { db.collection('payments').doc(up.id).set(up, { merge: true }); };
-    const addPayment = async (p: Omit<Payment, 'id'| 'userId'>) => { const prop = properties.find(pr=>pr.id === p.propertyId); if(!prop || !checkOwnership(prop)) return; const ref = await db.collection('payments').add({ ...p, userId: user.id }); const final = { ...p, id: ref.id, userId: user.id }; recalculateNextMonthBalance(final, [...payments, final], properties, updatePaymentFirestore); };
-    const updatePayment = (up: Payment) => { if(!checkOwnership(up)) return; updatePaymentFirestore(up); recalculateNextMonthBalance(up, payments, properties, updatePaymentFirestore); };
-    const deletePayment = async (id: string) => { const pDel = payments.find(p => p.id === id); if (!pDel || !checkOwnership(pDel)) return; await db.collection('payments').doc(id).delete(); recalculateNextMonthBalance(pDel, payments.filter(p => p.id !== id), properties, updatePaymentFirestore, true); };
-    const addRepair = (r: Omit<Repair, 'id'| 'userId'>) => { const prop = properties.find(pr=>pr.id === r.propertyId); if(!prop || !checkOwnership(prop)) return; db.collection('repairs').add({ ...r, userId: user.id }); };
-    const updateRepair = (ur: Repair) => { if(!checkOwnership(ur)) return; const { id, ...data } = ur; db.collection('repairs').doc(id).set(data, { merge: true }); };
-    const deleteRepair = (id: string) => { const rep = repairs.find(r=>r.id===id); if(!rep || !checkOwnership(rep)) return; db.collection('repairs').doc(id).delete(); };
-    const addContractor = (c: Omit<Contractor, 'id'|'userId'>) => { const ref = db.collection('contractors').doc(); ref.set({ ...c, userId: user.id }); return { ...c, id: ref.id, userId: user.id }; };
-    const updateContractor = (uc: Contractor) => { if(!checkOwnership(uc)) return; const { id, ...data } = uc; db.collection('contractors').doc(id).set(data, { merge: true }); };
+        const unsubscribers = collections.map(collectionName => {
+            return db.collection(collectionName).where('userId', '==', ownerId).onSnapshot((snapshot: any) => {
+                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                setters[collectionName](data);
+            });
+        });
+
+        setIsLoading(false); // Data will flow in via snapshots
+
+        return () => unsubscribers.forEach(unsub => unsub());
+    }, [ownerId]);
+
+    const guard = (op: Function) => (...args: any) => { if (isReadOnly) { console.warn("Read-only mode: operation blocked."); return; } return op(...args); };
     
-    // Share functions - these always operate as the logged-in user.
+    const addProperty = guard((p: Omit<Property, 'id' | 'userId'>) => { db.collection('properties').add({ ...p, userId: user.id }); });
+    const updateProperty = guard((up: Property) => { const { id, ...data } = up; db.collection('properties').doc(id).set(data, { merge: true }); });
+    const deleteProperty = guard(async (id: string) => { if (!db) return; const batch = db.batch(); const pQuery = await db.collection('payments').where('propertyId', '==', id).get(); pQuery.forEach((doc: any) => batch.delete(doc.ref)); const rQuery = await db.collection('repairs').where('propertyId', '==', id).get(); rQuery.forEach((doc: any) => batch.delete(doc.ref)); const propRef = db.collection('properties').doc(id); batch.delete(propRef); await batch.commit(); });
+    const updatePaymentFirestore = guard((up: Payment) => { db.collection('payments').doc(up.id).set(up, { merge: true }); });
+    const addPayment = guard(async (p: Omit<Payment, 'id'| 'userId'>) => { const ref = await db.collection('payments').add({ ...p, userId: user.id }); const final = { ...p, id: ref.id, userId: user.id }; recalculateNextMonthBalance(final, [...payments, final], properties, updatePaymentFirestore); });
+    const updatePayment = guard((up: Payment) => { updatePaymentFirestore(up); recalculateNextMonthBalance(up, payments, properties, updatePaymentFirestore); });
+    const deletePayment = guard(async (id: string) => { const pDel = payments.find(p => p.id === id); if (!pDel) return; await db.collection('payments').doc(id).delete(); recalculateNextMonthBalance(pDel, payments.filter(p => p.id !== id), properties, updatePaymentFirestore, true); });
+    const addRepair = guard((r: Omit<Repair, 'id'| 'userId'>) => { db.collection('repairs').add({ ...r, userId: user.id }); });
+    const updateRepair = guard((ur: Repair) => { const { id, ...data } = ur; db.collection('repairs').doc(id).set(data, { merge: true }); });
+    const deleteRepair = guard((id: string) => { db.collection('repairs').doc(id).delete(); });
+    const addContractor = guard((c: Omit<Contractor, 'id'|'userId'>) => { const ref = db.collection('contractors').doc(); ref.set({ ...c, userId: user.id }); return { ...c, id: ref.id, userId: user.id }; });
+    const updateContractor = guard((uc: Contractor) => { const { id, ...data } = uc; db.collection('contractors').doc(id).set(data, { merge: true }); });
+
+    // Share functions - these always operate as the logged-in user, never in read-only mode.
     const getSharesByOwner = async (): Promise<Share[]> => { if (!db || !user) return []; const snap = await db.collection('shares').where('ownerId', '==', user.id).get(); return snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })); };
     const findUserByEmail = async (email: string): Promise<User | null> => { if (!db) return null; const snap = await db.collection('users').where('email', '==', email).limit(1).get(); if (snap.empty) return null; const doc = snap.docs[0]; return { id: doc.id, ...doc.data() } as User; };
     const addShare = async (share: Omit<Share, 'id'>) => { if (!db) return; await db.collection('shares').add(share); };
     const deleteShare = async (shareId: string) => { if (!db) return; await db.collection('shares').doc(shareId).delete(); };
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, getSharesByOwner, findUserByEmail, addShare, deleteShare }), [properties, payments, repairs, contractors]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, getSharesByOwner, findUserByEmail, addShare, deleteShare }), [properties, payments, repairs, contractors, user.id]);
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };
 

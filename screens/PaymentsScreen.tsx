@@ -172,13 +172,12 @@ interface PaymentsScreenProps {
 
 const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, payments, getPaymentsForProperty, addPayment, updatePayment, deletePayment } = useAppContext();
-    const { user } = useAuth();
+    const { isReadOnly } = useAuth();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>(undefined);
 
     const selectedProperty = useMemo(() => properties.find(p => p.id === selectedPropertyId), [properties, selectedPropertyId]);
-    const isReadOnly = selectedProperty?.userId !== user?.id;
 
     const openAddModal = useCallback(() => {
         if (isReadOnly || properties.length === 0 || !selectedProperty) return;
@@ -193,14 +192,14 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     }, [isReadOnly]);
 
     useEffect(() => {
-        if (action === 'add') {
+        if (action === 'add' && !isReadOnly) {
           openAddModal();
           onActionDone();
         }
-    }, [action, onActionDone, openAddModal]);
+    }, [action, onActionDone, openAddModal, isReadOnly]);
 
     useEffect(() => {
-        if (editTarget && editTarget.type === 'payment') {
+        if (editTarget && editTarget.type === 'payment' && !isReadOnly) {
             const paymentToEdit = payments.find(p => p.id === editTarget.id);
             if (paymentToEdit) {
                 setSelectedPropertyId(paymentToEdit.propertyId);
@@ -208,7 +207,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
             }
             onActionDone();
         }
-    }, [editTarget, onActionDone, payments]);
+    }, [editTarget, onActionDone, payments, isReadOnly]);
 
     useEffect(() => {
         if(editTarget && editTarget.type === 'payment' && selectedProperty && selectedProperty.id === editTarget.id) {
@@ -284,10 +283,10 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                          {properties.length === 0 && <option>No properties available</option>}
                         {properties.map(prop => <option key={prop.id} value={prop.id}>{prop.name}</option>)}
                     </select>
-                    <button onClick={handleExportPdf} disabled={!selectedProperty} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button onClick={handleExportPdf} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                         <ArrowDownTrayIcon className="w-4 h-4" /> Export PDF
                     </button>
-                    <button onClick={handleExportCsv} disabled={!selectedProperty} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button onClick={handleExportCsv} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                         <ArrowDownTrayIcon className="w-4 h-4" /> Export Excel
                     </button>
                     <button onClick={openAddModal} disabled={!selectedProperty || isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
