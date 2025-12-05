@@ -48,6 +48,7 @@ interface AppContextType {
   getRepairsForProperty: (propertyId: string) => Repair[];
   searchProperties: (query: string) => Property[];
   getSiteHealthScore: (propertyId: string) => number;
+  isUserPropertyOwner: (email: string) => Promise<boolean>;
   // Share functions
   getSharesByOwner: () => Promise<Share[]>;
   findUserByEmail: (email: string) => Promise<User | null>;
@@ -105,8 +106,13 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
     const addNotification = (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { setNotifications(current => [...current, { ...n, id: crypto.randomUUID(), userId: sender.id, senderId: sender.id, senderName: sender.name, senderEmail: sender.email, timestamp: new Date().toISOString(), isAcknowledged: false }]); };
     const updateNotification = (id: string, updates: Partial<Notification>) => setNotifications(current => current.map(n => n.id === id ? { ...n, ...updates } : n));
     const deleteNotification = (id: string) => setNotifications(current => current.filter(n => n.id !== id));
+    const isUserPropertyOwner = async (email: string) => {
+      // In guest mode, only the "guest" user owns properties.
+      // This is a simplified check for the local session.
+      return email === 'guest@local.com' && properties.length > 0;
+    };
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification }), [properties, payments, repairs, contractors, notifications]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, isUserPropertyOwner }), [properties, payments, repairs, contractors, notifications]);
 
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
@@ -177,13 +183,24 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const updateNotification = (id: string, updates: Partial<Notification>) => { db.collection('notifications').doc(id).update(updates); };
     const deleteNotification = (id: string) => { db.collection('notifications').doc(id).delete(); };
 
+    const isUserPropertyOwner = async (email: string): Promise<boolean> => {
+        if (!db) return false;
+        const userSnap = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
+        if (userSnap.empty) return false;
+        
+        const targetUser = { id: userSnap.docs[0].id };
+        const propertiesSnap = await db.collection('properties').where('userId', '==', targetUser.id).limit(1).get();
+        return !propertiesSnap.empty;
+    };
+
+
     // Share functions are only available when NOT in read-only mode
     const getSharesByOwner = async (): Promise<Share[]> => { if (isReadOnly || !db || !user) return []; const snap = await db.collection('shares').where('ownerId', '==', user.id).get(); return snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })); };
     const findUserByEmail = async (email: string): Promise<User | null> => { if (isReadOnly || !db) return null; const snap = await db.collection('users').where('email', '==', email).limit(1).get(); if (snap.empty) return null; const doc = snap.docs[0]; return { id: doc.id, ...doc.data() } as User; };
     const addShare = async (share: Omit<Share, 'id'>) => { if (isReadOnly || !db) return; await db.collection('shares').add(share); };
     const deleteShare = async (shareId: string) => { if (isReadOnly || !db) return; await db.collection('shares').doc(shareId).delete(); };
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, isUserPropertyOwner }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly]);
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };
 
@@ -208,7 +225,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (authStatus === 'guest') {
         return <GuestDataProvider user={user}>{children}</GuestDataProvider>;
     }
-    const loadingData = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], addProperty: () => {}, updateProperty: () => {}, deleteProperty: () => {}, addPayment: () => {}, updatePayment: () => {}, deletePayment: () => {}, addRepair: () => {}, updateRepair: () => {}, deleteRepair: () => {}, addContractor: (c: Omit<Contractor, 'id'|'userId'>) => ({ ...c, id: 'loading-id', userId: 'loading' }), updateContractor: () => {}, addNotification: () => {}, updateNotification: () => {}, deleteNotification: () => {}, getSharesByOwner: async () => [], findUserByEmail: async () => null, addShare: async () => {}, deleteShare: async () => {} };
+    const loadingData = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], addProperty: () => {}, updateProperty: () => {}, deleteProperty: () => {}, addPayment: () => {}, updatePayment: () => {}, deletePayment: () => {}, addRepair: () => {}, updateRepair: () => {}, deleteRepair: () => {}, addContractor: (c: Omit<Contractor, 'id'|'userId'>) => ({ ...c, id: 'loading-id', userId: 'loading' }), updateContractor: () => {}, addNotification: () => {}, updateNotification: () => {}, deleteNotification: () => {}, getSharesByOwner: async () => [], findUserByEmail: async () => null, addShare: async () => {}, deleteShare: async () => {}, isUserPropertyOwner: async () => false };
     return <AppProviderLogic data={loadingData} isLoading={true}>{children}</AppProviderLogic>;
 };
 

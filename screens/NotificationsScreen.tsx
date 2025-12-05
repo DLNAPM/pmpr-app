@@ -6,12 +6,13 @@ import { BellIcon, CheckCircleIcon, TrashIcon } from '../components/Icons';
 import { Notification } from '../types';
 
 const NotificationsScreen: React.FC = () => {
-    const { notifications, addNotification, updateNotification, deleteNotification } = useAppContext();
+    const { notifications, addNotification, updateNotification, deleteNotification, isUserPropertyOwner } = useAppContext();
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
     const [recipientEmail, setRecipientEmail] = useState('');
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
+    const [isSending, setIsSending] = useState(false);
 
     const { received, sent } = useMemo(() => {
         if (!user) return { received: [], sent: [] };
@@ -25,21 +26,43 @@ const NotificationsScreen: React.FC = () => {
         return { received, sent };
     }, [notifications, user]);
 
-    const handleSendMessage = (e: React.FormEvent) => {
+    const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        if (!user) {
+            setError('You must be logged in to send messages.');
+            return;
+        }
         if (!recipientEmail || !message) {
             setError('Recipient email and message cannot be empty.');
             return;
         }
-        if (recipientEmail.toLowerCase() === user?.email.toLowerCase()) {
+        if (recipientEmail.toLowerCase() === user.email.toLowerCase()) {
             setError('You cannot send a notification to yourself.');
             return;
         }
-        addNotification({ recipientEmail: recipientEmail.toLowerCase(), message });
-        setRecipientEmail('');
-        setMessage('');
-        setActiveTab('sent');
+
+        setIsSending(true);
+        try {
+            const senderIsOwner = await isUserPropertyOwner(user.email);
+            const recipientIsOwner = await isUserPropertyOwner(recipientEmail);
+
+            if (!senderIsOwner && !recipientIsOwner) {
+                setError('Messaging is restricted. At least one user (sender or recipient) must own a property.');
+                setIsSending(false);
+                return;
+            }
+
+            addNotification({ recipientEmail: recipientEmail.toLowerCase(), message });
+            setRecipientEmail('');
+            setMessage('');
+            setActiveTab('sent');
+        } catch (err) {
+            console.error(err);
+            setError('An error occurred while sending the message. Please try again.');
+        } finally {
+            setIsSending(false);
+        }
     };
 
     const handleAcknowledge = (id: string) => {
@@ -151,8 +174,8 @@ const NotificationsScreen: React.FC = () => {
                                 />
                             </div>
                             {error && <p className="text-red-500 text-sm">{error}</p>}
-                            <button type="submit" className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                                Send Message
+                            <button type="submit" disabled={isSending} className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400">
+                                {isSending ? 'Sending...' : 'Send Message'}
                             </button>
                         </form>
                     </CardContent>

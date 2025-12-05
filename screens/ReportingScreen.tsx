@@ -76,29 +76,39 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     
     // FIX: Explicitly typed the accumulator in `reduce` to ensure correct type inference, resolving errors where properties like `.length` and `.sort` were not found on `unknown` type. Also formatted for readability.
     const handleReconcile = () => {
-        const paymentGroups = Object.values(payments.reduce((acc: Record<string, Payment[]>, p) => {
-            const key = `${p.propertyId}-${p.year}-${p.month}`;
-            if (!acc[key]) acc[key] = [];
-            acc[key].push(p);
-            return acc;
-        }, {})).filter(group => group.length > 1);
+        const paymentGroups = Object.values(
+            payments.reduce((acc: Record<string, Payment[]>, p) => {
+                const key = `${p.propertyId}-${p.year}-${p.month}`;
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(p);
+                return acc;
+            }, {})
+        ).filter(group => group.length > 1);
 
-        const repairGroups = Object.values(repairs.reduce((acc: Record<string, Repair[]>, r) => {
-            const key = `${r.propertyId}-${r.description}-${r.cost}-${new Date(r.requestDate).toLocaleDateString()}`;
-            if (!acc[key]) acc[key] = [];
-            acc[key].push(r);
-            return acc;
-        }, {})).filter(group => group.length > 1);
+        const repairGroups = Object.values(
+            repairs.reduce((acc: Record<string, Repair[]>, r) => {
+                const key = `${r.propertyId}-${r.description}-${r.cost}-${new Date(
+                    r.requestDate
+                ).toLocaleDateString()}`;
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(r);
+                return acc;
+            }, {})
+        ).filter(group => group.length > 1);
 
         setDuplicatePayments(paymentGroups);
         setDuplicateRepairs(repairGroups);
         const initialSelections: Record<string, string> = {};
         paymentGroups.forEach((group, index) => {
-            const best = group.sort((a, b) => (b.paymentDate ? 1 : -1) - (a.paymentDate ? 1 : -1))[0];
+            const best = group.sort(
+                (a, b) => (b.paymentDate ? 1 : -1) - (a.paymentDate ? 1 : -1)
+            )[0];
             initialSelections[`payment-${index}`] = best.id;
         });
         repairGroups.forEach((group, index) => {
-            const best = group.sort((a, b) => (b.completionDate ? 1 : -1) - (a.completionDate ? 1 : -1))[0];
+            const best = group.sort(
+                (a, b) => (b.completionDate ? 1 : -1) - (a.completionDate ? 1 : -1)
+            )[0];
             initialSelections[`repair-${index}`] = best.id;
         });
         setSelections(initialSelections);
