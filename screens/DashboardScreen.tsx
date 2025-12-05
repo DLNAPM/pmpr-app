@@ -1,6 +1,4 @@
-
-
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import ProgressBar from '../components/ProgressBar';
 import { useAppContext } from '../contexts/AppContext';
@@ -31,7 +29,100 @@ const getFakeRedfinValue = (propertyId: string) => {
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateToReport }) => {
     const { properties, payments, repairs, getSiteHealthScore } = useAppContext();
 
-    // New summary for ALL-TIME financial data
+    // New state for the dynamic breakdown
+    const [selectedBreakdownPropertyId, setSelectedBreakdownPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
+    const [selectedBreakdownMonth, setSelectedBreakdownMonth] = useState<string>(''); // Format: 'YYYY-MM'
+
+    // Effect to set initial property if not set or if properties change
+    useEffect(() => {
+        if (properties.length > 0 && !properties.some(p => p.id === selectedBreakdownPropertyId)) {
+            setSelectedBreakdownPropertyId(properties[0].id);
+        } else if (properties.length === 0) {
+            setSelectedBreakdownPropertyId(null);
+        }
+    }, [properties, selectedBreakdownPropertyId]);
+
+    // Memoize the available months for the selected property
+    const availableMonths = useMemo(() => {
+        const property = properties.find(p => p.id === selectedBreakdownPropertyId);
+        if (!property || !property.leaseStart || !property.leaseEnd) return [];
+
+        const start = new Date(property.leaseStart);
+        const end = new Date(); // Go up to the current date
+        const leaseEndDate = new Date(property.leaseEnd);
+        const finalEnd = end > leaseEndDate ? leaseEndDate : end;
+
+        const months = [];
+        let current = new Date(start.getFullYear(), start.getMonth(), 1);
+
+        while (current <= finalEnd) {
+            const year = current.getFullYear();
+            const month = current.getMonth() + 1;
+            months.push({
+                value: `${year}-${String(month).padStart(2, '0')}`,
+                label: `${MONTHS[month - 1]} ${year}`
+            });
+            current.setMonth(current.getMonth() + 1);
+        }
+        return months.reverse(); // Show most recent first
+    }, [selectedBreakdownPropertyId, properties]);
+
+    // Effect to set the default month when property or months change
+    useEffect(() => {
+        if (availableMonths.length > 0) {
+            if (!availableMonths.some(m => m.value === selectedBreakdownMonth)) {
+                setSelectedBreakdownMonth(availableMonths[0].value);
+            }
+        } else {
+            setSelectedBreakdownMonth('');
+        }
+    }, [availableMonths, selectedBreakdownMonth]);
+
+    // New logic for a single, selected month breakdown
+    const paymentBreakdownForSelectedMonth = useMemo(() => {
+        if (!selectedBreakdownPropertyId || !selectedBreakdownMonth) {
+            return { categoryBreakdown: {}, hasData: false };
+        }
+
+        const [yearStr, monthStr] = selectedBreakdownMonth.split('-');
+        const year = parseInt(yearStr);
+        const month = parseInt(monthStr);
+
+        const paymentForMonth = payments.find(p =>
+            p.propertyId === selectedBreakdownPropertyId &&
+            p.year === year &&
+            p.month === month
+        );
+        
+        const categoryBreakdown: { [key: string]: { paid: number, total: number } } = {};
+        const property = properties.find(p => p.id === selectedBreakdownPropertyId);
+        let hasData = false;
+        
+        if (property) {
+            const categories = ['Rent', ...property.utilitiesToTrack];
+            
+            categories.forEach(category => {
+                let paid = 0;
+                let total = 0;
+                if (paymentForMonth) {
+                    hasData = true;
+                    if (category === 'Rent') {
+                        paid = paymentForMonth.rentPaidAmount;
+                        total = paymentForMonth.rentBillAmount;
+                    } else {
+                        const utilityPayment = paymentForMonth.utilities.find(u => u.category === category);
+                        paid = utilityPayment?.paidAmount || 0;
+                        total = utilityPayment?.billAmount || 0;
+                    }
+                }
+                categoryBreakdown[category] = { paid, total };
+            });
+        }
+        
+        return { categoryBreakdown, hasData: hasData || (property && !paymentForMonth) };
+
+    }, [selectedBreakdownPropertyId, selectedBreakdownMonth, payments, properties]);
+
     const overallSummary = useMemo(() => {
         const paymentTotals = payments.reduce((acc, p) => {
             acc.billed += p.rentBillAmount;
@@ -44,9 +135,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
         }, { collected: 0, billed: 0 });
 
         const repairTotals = repairs.reduce((acc, r) => {
-            acc.billed += r.cost; // All repairs are a bill
+            acc.billed += r.cost;
             if (r.status === RepairStatus.COMPLETE) {
-                acc.collected += r.cost; // Only completed repairs are considered paid
+                acc.collected += r.cost;
             }
             return acc;
         }, { collected: 0, billed: 0 });
@@ -58,16 +149,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
         return { totalCollected, totalBilled, totalOutstanding };
     }, [payments, repairs]);
 
-
-    // Summary for THIS MONTH's payment data
     const monthlySummary = useMemo(() => {
         let totalCollected = 0;
         let totalBilled = 0;
-
         const now = new Date();
         const currentMonth = now.getMonth() + 1;
         const currentYear = now.getFullYear();
-
         payments.filter(p => p.year === currentYear && p.month === currentMonth).forEach(p => {
             totalCollected += p.rentPaidAmount;
             totalBilled += p.rentBillAmount;
@@ -76,47 +163,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
                 totalBilled += u.billAmount;
             });
         });
-
         const overallCollectionRate = totalBilled > 0 ? (totalCollected / totalBilled) * 100 : 100;
-
         return { overallCollectionRate };
-    }, [payments]);
-    
-    // New breakdown for the last 6 months
-    const paymentBreakdownSummary = useMemo(() => {
-        const monthsData = [];
-        const now = new Date();
-
-        for (let i = 0; i < 6; i++) {
-            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            const year = date.getFullYear();
-            const month = date.getMonth() + 1;
-            const monthName = MONTHS[month - 1];
-
-            const paymentsForMonth = payments.filter(p => p.year === year && p.month === month);
-
-            const categoryBreakdown: { [key: string]: { paid: number, total: number } } = {};
-
-            paymentsForMonth.forEach(p => {
-                if (!categoryBreakdown['Rent']) categoryBreakdown['Rent'] = { paid: 0, total: 0 };
-                categoryBreakdown['Rent'].paid += p.rentPaidAmount;
-                categoryBreakdown['Rent'].total += p.rentBillAmount;
-
-                p.utilities.forEach(u => {
-                    if (!categoryBreakdown[u.category]) categoryBreakdown[u.category] = { paid: 0, total: 0 };
-                    categoryBreakdown[u.category].paid += u.paidAmount;
-                    categoryBreakdown[u.category].total += u.billAmount;
-                });
-            });
-
-            monthsData.push({
-                label: `${monthName} ${year}`,
-                categoryBreakdown,
-                hasData: paymentsForMonth.length > 0
-            });
-        }
-
-        return monthsData;
     }, [payments]);
 
     const repairSummary = useMemo(() => {
@@ -155,12 +203,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
         }
     };
 
-
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Main Column */}
             <div className="md:col-span-2 space-y-6">
-                 {/* Quick Actions */}
                 <Card>
                     <CardHeader><h3 className="font-semibold text-lg">Quick Actions</h3></CardHeader>
                     <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -179,14 +224,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
                     </CardContent>
                 </Card>
 
-                {/* Summary Cards (All-Time) */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <Card onClick={() => onNavigateToReport({ status: 'collected' })}><CardContent><p className="text-sm text-gray-500">Total Collected</p><p className="text-2xl font-bold text-green-600">{formatCurrency(overallSummary.totalCollected)}</p></CardContent></Card>
                     <Card onClick={() => onNavigateToReport({ status: 'outstanding' })}><CardContent><p className="text-sm text-gray-500">Outstanding</p><p className="text-2xl font-bold text-red-600">{formatCurrency(overallSummary.totalOutstanding)}</p></CardContent></Card>
                     <Card onClick={() => onNavigateToReport({ status: 'all' })}><CardContent><p className="text-sm text-gray-500">Total Billed</p><p className="text-2xl font-bold text-blue-800">{formatCurrency(overallSummary.totalBilled)}</p></CardContent></Card>
                 </div>
 
-                {/* Overall Collection (This Month) */}
                 <Card>
                     <CardHeader><h3 className="font-semibold text-lg">Overall Collection Rate (This Month)</h3></CardHeader>
                     <CardContent>
@@ -196,41 +239,65 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
                         </div>
                     </CardContent>
                 </Card>
-
-                {/* Payment Breakdown (Last 6 Months) */}
+                
                 <Card>
-                    <CardHeader><h3 className="font-semibold text-lg">Monthly Payment Breakdown</h3></CardHeader>
-                    <CardContent className="space-y-6">
-                        {paymentBreakdownSummary.map(monthData => (
-                            <div key={monthData.label}>
-                                <h4 className="font-semibold text-md text-gray-700 mb-3">{monthData.label}</h4>
-                                {monthData.hasData ? (
-                                    <div className="space-y-4 pl-3 border-l-2 border-slate-200">
-                                        {/* FIX: Replaced Object.entries with Object.keys to ensure correct type inference for `data`. */}
-                                        {Object.keys(monthData.categoryBreakdown).map(category => {
-                                            const data = monthData.categoryBreakdown[category];
-                                            return (
-                                                <div key={category}>
-                                                    <div className="flex justify-between items-center mb-1">
-                                                        <span className="font-medium">{category}</span>
-                                                        <span className="text-sm text-gray-600">{formatCurrency(data.paid)} / {formatCurrency(data.total)}</span>
-                                                    </div>
-                                                    <ProgressBar value={data.total > 0 ? (data.paid / data.total) * 100 : 0} />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <p className="text-gray-500 text-sm pl-3 border-l-2 border-slate-200">No payments recorded for this month.</p>
-                                )}
+                    <CardHeader>
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                            <h3 className="font-semibold text-lg">Monthly Payment Breakdown</h3>
+                            <div className="flex items-center gap-2">
+                                <select
+                                    value={selectedBreakdownPropertyId || ''}
+                                    onChange={(e) => setSelectedBreakdownPropertyId(e.target.value)}
+                                    className="p-2 border rounded-md text-sm bg-white shadow-sm"
+                                    disabled={properties.length === 0}
+                                >
+                                    {properties.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={selectedBreakdownMonth}
+                                    onChange={(e) => setSelectedBreakdownMonth(e.target.value)}
+                                    className="p-2 border rounded-md text-sm bg-white shadow-sm"
+                                    disabled={availableMonths.length === 0}
+                                >
+                                    {availableMonths.map(month => (
+                                        <option key={month.value} value={month.value}>{month.label}</option>
+                                    ))}
+                                </select>
                             </div>
-                        ))}
-                         {paymentBreakdownSummary.every(m => !m.hasData) && <p className="text-gray-500 text-center py-4">No payments recorded in the last 6 months.</p>}
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {selectedBreakdownPropertyId && selectedBreakdownMonth ? (
+                            paymentBreakdownForSelectedMonth.hasData ? (
+                                <div className="space-y-4">
+                                    {Object.keys(paymentBreakdownForSelectedMonth.categoryBreakdown).map(category => {
+                                        const data = paymentBreakdownForSelectedMonth.categoryBreakdown[category];
+                                        return (
+                                            <div key={category}>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="font-medium">{category}</span>
+                                                    <span className="text-sm text-gray-600">{formatCurrency(data.paid)} / {formatCurrency(data.total)}</span>
+                                                </div>
+                                                <ProgressBar value={data.total > 0 ? (data.paid / data.total) * 100 : (data.paid > 0 ? 100 : 0)} />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="text-gray-500 text-center py-4">No payment record found for this month.</p>
+                            )
+                        ) : (
+                            <p className="text-gray-500 text-center py-4">
+                                {properties.length > 0 ? "Select a property and month to view breakdown." : "Please add a property to see payment breakdowns."}
+                            </p>
+                        )}
                     </CardContent>
                 </Card>
+
             </div>
 
-            {/* Side Column */}
             <div className="space-y-6">
                  <Card>
                     <CardHeader><h3 className="font-semibold text-lg">Properties & Repairs</h3></CardHeader>
