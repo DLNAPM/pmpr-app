@@ -6,6 +6,7 @@ import RepairsScreen from './screens/RepairsScreen';
 import ReportingScreen from './screens/ReportingScreen';
 import ContractorsScreen from './screens/ContractorsScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
+import AccountScreen from './screens/AccountScreen';
 import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon, BellIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
@@ -14,7 +15,7 @@ import ShareDataModal from './screens/ShareDataModal';
 import DatabaseSelectionScreen from './screens/DatabaseSelectionScreen';
 import { useAppContext } from './contexts/AppContext';
 
-type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications';
+export type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications' | 'account';
 export type ReportFilter = { 
   status?: 'all' | 'collected' | 'outstanding';
   repairStatus?: 'all' | 'open' | 'completed';
@@ -72,7 +73,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const navItems = [
+  const desktopNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: ChartPieIcon },
     { id: 'properties', label: 'Properties', icon: BuildingOfficeIcon },
     { id: 'payments', label: 'Payments', icon: CreditCardIcon },
@@ -82,24 +83,39 @@ const App: React.FC = () => {
     { id: 'notifications', label: 'Notifications', icon: BellIcon, badge: unacknowledgedCount },
   ];
 
+  const mobileNavItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: ChartPieIcon },
+    { id: 'properties', label: 'Properties', icon: BuildingOfficeIcon },
+    { id: 'payments', label: 'Payments', icon: CreditCardIcon },
+    { id: 'repairs', label: 'Repairs', icon: WrenchScrewdriverIcon },
+    { id: 'account', label: 'Account', icon: UserCircleIcon, badge: unacknowledgedCount > 0 ? 'dot' : 0 },
+  ];
+  
   if (authStatus === 'idle' || authStatus === 'loading') {
     return <LoginScreen />;
   }
   if (authStatus === 'selecting_db') {
     return <DatabaseSelectionScreen />;
   }
+  
+  const revision = useMemo(() => {
+    const d = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `rev.${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}.${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  }, []);
 
   return (
     <>
     <div className="flex flex-col h-screen bg-gray-100 font-sans">
       <div className="flex flex-1 overflow-hidden">
+        {/* Desktop Sidebar */}
         <aside className="hidden md:flex w-64 bg-slate-800 text-white flex-col">
           <div className="px-6 py-4 border-b border-slate-700">
             <h1 className="text-2xl font-bold tracking-tight">PMPR</h1>
             <p className="text-xs text-slate-400">Property Management</p>
           </div>
           <nav className="flex-1 px-4 py-4 space-y-2">
-            {navItems.map(item => (
+            {desktopNavItems.map(item => (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id as Tab)}
@@ -122,7 +138,7 @@ const App: React.FC = () => {
             </div>
             <div className="mt-2 space-y-2">
                {!isReadOnly && user && (
-                   <button onClick={() => setIsShareModalOpen(true)} className="w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-700 hover:text-white">
+                   <button onClick={() => setIsShareModalOpen(true)} title="Share Your Properties (Read-Only)" className="w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-700 hover:text-white">
                       <ShareIcon className="w-5 h-5 mr-3"/>
                       Share Data
                   </button>
@@ -138,25 +154,51 @@ const App: React.FC = () => {
           </div>
         </aside>
 
-        <main className="flex-1 p-6 overflow-y-auto">
-          {isReadOnly && activeDbOwner && (
-              <div className="bg-yellow-400 text-yellow-900 text-center text-sm font-semibold p-2 rounded-lg mb-6">
-                  You are viewing {activeDbOwner.name}'s ({activeDbOwner.email}) database in Read-Only mode.
-              </div>
-          )}
-          {activeTab === 'dashboard' && <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />}
-          {activeTab === 'properties' && <PropertiesScreen action={action} onActionDone={handleActionDone} />}
-          {activeTab === 'payments' && <PaymentsScreen action={action} editTarget={editTarget} onActionDone={handleActionDone} />}
-          {activeTab === 'repairs' && <RepairsScreen action={action} editTarget={editTarget} onActionDone={handleActionDone} />}
-          {activeTab === 'contractors' && <ContractorsScreen />}
-          {activeTab === 'reporting' && <ReportingScreen initialFilter={reportFilter} onFilterApplied={onFilterApplied} onEditItem={handleEditItem} />}
-          {activeTab === 'notifications' && <NotificationsScreen />}
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
+          <div className="p-6">
+            {isReadOnly && activeDbOwner && (
+                <div className="bg-yellow-400 text-yellow-900 text-center text-sm font-semibold p-2 rounded-lg mb-6">
+                    You are viewing {activeDbOwner.name}'s ({activeDbOwner.email}) database in Read-Only mode.
+                </div>
+            )}
+            {activeTab === 'dashboard' && <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />}
+            {activeTab === 'properties' && <PropertiesScreen action={action} onActionDone={handleActionDone} />}
+            {activeTab === 'payments' && <PaymentsScreen action={action} editTarget={editTarget} onActionDone={handleActionDone} />}
+            {activeTab === 'repairs' && <RepairsScreen action={action} editTarget={editTarget} onActionDone={handleActionDone} />}
+            {activeTab === 'contractors' && <ContractorsScreen />}
+            {activeTab === 'reporting' && <ReportingScreen initialFilter={reportFilter} onFilterApplied={onFilterApplied} onEditItem={handleEditItem} />}
+            {activeTab === 'notifications' && <NotificationsScreen />}
+            {activeTab === 'account' && <AccountScreen onNavigate={setActiveTab} onOpenShare={() => setIsShareModalOpen(true)} onOpenHelp={() => setIsHelpModalOpen(true)} onLogout={logout} />}
+          </div>
         </main>
       </div>
-      <footer className="p-4 text-xs text-gray-500 text-center">
-        © 2025 C&SH Group Properties, LLC. Created for free using Google AIStudio and Render.com
+      
+      {/* Footer */}
+      <footer className="w-full bg-gray-100 p-4 text-xs text-gray-500 flex justify-between items-center border-t md:pl-72">
+        <span>© 2025 C&SH Group Properties, LLC. Created for free using Google AIStudio and Render.com</span>
+        <span>{revision}</span>
       </footer>
+
+      {/* Mobile Bottom Nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-800 text-white flex justify-around border-t border-slate-700">
+        {mobileNavItems.map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id as Tab)}
+            className={`flex flex-col items-center justify-center p-2 w-full ${activeTab === item.id ? 'text-blue-400' : 'text-slate-400'}`}
+          >
+            <div className="relative">
+              <item.icon className="h-6 w-6"/>
+              {item.badge === 'dot' && <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-slate-800"></span>}
+            </div>
+            <span className="text-xs mt-1">{item.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
+    
+    {/* Modals and Audio */}
     {isHelpModalOpen && <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />}
     {isShareModalOpen && <ShareDataModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />}
     <audio ref={audioRef} src="data:audio/mpeg;base64,SUQzBAAAAAAAI..."></audio>
