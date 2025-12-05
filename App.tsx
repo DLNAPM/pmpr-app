@@ -149,7 +149,12 @@ const App: React.FC = () => {
             <h1 className="text-2xl font-bold text-blue-800 tracking-tight">PMPR App</h1>
             <div className="flex items-center gap-4">
                {authStatus === 'authenticated' && !isReadOnly && (
-                 <button onClick={() => setIsShareModalOpen(true)} className="text-gray-500 hover:text-blue-600 transition-colors" aria-label="Share Data">
+                 <button 
+                    onClick={() => setIsShareModalOpen(true)} 
+                    className="text-gray-500 hover:text-blue-600 transition-colors" 
+                    aria-label="Share Data"
+                    title="Share Your Properties (Read-Only)"
+                 >
                      <ShareIcon className="w-6 h-6" />
                  </button>
                )}
