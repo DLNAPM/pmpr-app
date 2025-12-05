@@ -1,3 +1,4 @@
+
 // Declare the global firebase object that is loaded from the script tags in index.html
 declare const firebase: any;
 

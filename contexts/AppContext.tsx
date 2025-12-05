@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
+
+import React, { createContext, useContext, useMemo, useState, useEffect, useRef } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification } from '../types';
 import { useAuth, User } from './AuthContext';
@@ -39,7 +40,7 @@ interface AppContextType {
   deleteRepair: (repairId: string) => void;
   addContractor: (contractor: Omit<Contractor, 'id'| 'userId'>) => Contractor;
   updateContractor: (updatedContractor: Contractor) => void;
-  addNotification: (notification: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => void;
+  addNotification: (notification: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => Promise<void>;
   updateNotification: (notificationId: string, updates: Partial<Notification>) => void;
   deleteNotification: (notificationId: string) => void;
   getPropertyById: (id: string) => Property | undefined;
@@ -103,7 +104,7 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
     const updateContractor = (updated: Contractor) => setContractors(c => c.map(con => con.id === updated.id ? updated : con));
 
     const sender = user || { id: 'guest_user', name: 'Guest', email: 'guest@local.com' };
-    const addNotification = (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { setNotifications(current => [...current, { ...n, id: crypto.randomUUID(), userId: sender.id, senderId: sender.id, senderName: sender.name, senderEmail: sender.email, timestamp: new Date().toISOString(), isAcknowledged: false }]); };
+    const addNotification = async (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { setNotifications(current => [...current, { ...n, id: crypto.randomUUID(), userId: sender.id, senderId: sender.id, senderName: sender.name, senderEmail: sender.email, timestamp: new Date().toISOString(), isAcknowledged: false }]); };
     const updateNotification = (id: string, updates: Partial<Notification>) => setNotifications(current => current.map(n => n.id === id ? { ...n, ...updates } : n));
     const deleteNotification = (id: string) => setNotifications(current => current.filter(n => n.id !== id));
     const isUserPropertyOwner = async (email: string) => {
@@ -124,6 +125,41 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const [contractors, setContractors] = useState<Contractor[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const previousNotificationsRef = useRef<Notification[] | null>(null);
+
+
+    // Effect to check for new notifications and play sound
+    useEffect(() => {
+        if (previousNotificationsRef.current === null) { // Don't play on initial load
+            previousNotificationsRef.current = notifications;
+            return;
+        }
+
+        const soundEnabled = localStorage.getItem('pmpr_notification_sound_enabled');
+        if (soundEnabled === 'false') {
+            previousNotificationsRef.current = notifications;
+            return;
+        }
+
+        if (user && previousNotificationsRef.current) {
+            const myEmail = user.email.toLowerCase();
+            const oldReceivedIds = new Set(
+                previousNotificationsRef.current
+                    .filter(n => n.recipientEmail.toLowerCase() === myEmail)
+                    .map(n => n.id)
+            );
+            
+            const newNotificationReceived = notifications.some(
+                n => n.recipientEmail.toLowerCase() === myEmail && !oldReceivedIds.has(n.id)
+            );
+
+            if (newNotificationReceived) {
+                window.dispatchEvent(new CustomEvent('play-notification-sound'));
+            }
+        }
+        
+        previousNotificationsRef.current = notifications;
+    }, [notifications, user]);
 
     useEffect(() => {
         if (!db || !user) return;
@@ -132,13 +168,30 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
         const unsubs: (() => void)[] = [];
         
         const fetchData = async () => {
+            // Reset state
             setProperties([]); setPayments([]); setRepairs([]); setContractors([]); setNotifications([]);
+            previousNotificationsRef.current = null; // Reset for sound check
             
-            // Notifications are personal and should always be fetched for the logged-in user
+            // Notifications are personal, fetched for the logged-in user, and merged.
             const receivedQuery = db.collection('notifications').where('recipientEmail', '==', user.email);
             const sentQuery = db.collection('notifications').where('senderId', '==', user.id);
-            unsubs.push(receivedQuery.onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.senderId === user.id), ...s.docs.map((d:any) => ({id:d.id, ...d.data()}))])));
-            unsubs.push(sentQuery.onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.recipientEmail === user.email), ...s.docs.map((d:any) => ({id:d.id, ...d.data()}))])));
+
+            const receivedUnsub = receivedQuery.onSnapshot((snapshot: any) => {
+                const receivedItems = snapshot.docs.map((d: any) => ({id: d.id, ...d.data()}));
+                setNotifications(current => {
+                    const otherItems = current.filter(n => n.recipientEmail.toLowerCase() !== user.email.toLowerCase());
+                    return [...otherItems, ...receivedItems];
+                });
+            });
+            const sentUnsub = sentQuery.onSnapshot((snapshot: any) => {
+                const sentItems = snapshot.docs.map((d: any) => ({id: d.id, ...d.data()}));
+                setNotifications(current => {
+                    const otherItems = current.filter(n => n.senderId !== user.id);
+                    return [...otherItems, ...sentItems];
+                });
+            });
+            unsubs.push(receivedUnsub, sentUnsub);
+
 
             if (isReadOnly) { // Viewing a shared database
                 const sharesSnap = await db.collection('shares').where('ownerId', '==', activeDbOwner.id).where('viewerId', '==', user.id).get();
@@ -179,7 +232,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const updateContractor = (uc: Contractor) => { if (!isReadOnly) { const { id, ...data } = uc; db.collection('contractors').doc(id).set(data, { merge: true }); }};
     
     // Notification functions work regardless of read-only mode, as they are personal to the user
-    const addNotification = (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { db.collection('notifications').add({ ...n, userId: user.id, senderId: user.id, senderName: user.name, senderEmail: user.email, timestamp: new Date().toISOString(), isAcknowledged: false }); };
+    const addNotification = async (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { await db.collection('notifications').add({ ...n, userId: user.id, senderId: user.id, senderName: user.name, senderEmail: user.email, timestamp: new Date().toISOString(), isAcknowledged: false }); };
     const updateNotification = (id: string, updates: Partial<Notification>) => { db.collection('notifications').doc(id).update(updates); };
     const deleteNotification = (id: string) => { db.collection('notifications').doc(id).delete(); };
 
@@ -188,8 +241,8 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
         const userSnap = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
         if (userSnap.empty) return false;
         
-        const targetUser = { id: userSnap.docs[0].id };
-        const propertiesSnap = await db.collection('properties').where('userId', '==', targetUser.id).limit(1).get();
+        const targetUserId = userSnap.docs[0].id;
+        const propertiesSnap = await db.collection('properties').where('userId', '==', targetUserId).limit(1).get();
         return !propertiesSnap.empty;
     };
 
@@ -225,7 +278,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (authStatus === 'guest') {
         return <GuestDataProvider user={user}>{children}</GuestDataProvider>;
     }
-    const loadingData = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], addProperty: () => {}, updateProperty: () => {}, deleteProperty: () => {}, addPayment: () => {}, updatePayment: () => {}, deletePayment: () => {}, addRepair: () => {}, updateRepair: () => {}, deleteRepair: () => {}, addContractor: (c: Omit<Contractor, 'id'|'userId'>) => ({ ...c, id: 'loading-id', userId: 'loading' }), updateContractor: () => {}, addNotification: () => {}, updateNotification: () => {}, deleteNotification: () => {}, getSharesByOwner: async () => [], findUserByEmail: async () => null, addShare: async () => {}, deleteShare: async () => {}, isUserPropertyOwner: async () => false };
+    const loadingData = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], addProperty: () => {}, updateProperty: () => {}, deleteProperty: () => {}, addPayment: () => {}, updatePayment: () => {}, deletePayment: () => {}, addRepair: () => {}, updateRepair: () => {}, deleteRepair: () => {}, addContractor: (c: Omit<Contractor, 'id'|'userId'>) => ({ ...c, id: 'loading-id', userId: 'loading' }), updateContractor: () => {}, addNotification: async () => {}, updateNotification: () => {}, deleteNotification: () => {}, getSharesByOwner: async () => [], findUserByEmail: async () => null, addShare: async () => {}, deleteShare: async () => {}, isUserPropertyOwner: async () => false };
     return <AppProviderLogic data={loadingData} isLoading={true}>{children}</AppProviderLogic>;
 };
 

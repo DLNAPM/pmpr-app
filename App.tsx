@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import DashboardScreen from './screens/DashboardScreen';
 import PropertiesScreen from './screens/PropertiesScreen';
 import PaymentsScreen from './screens/PaymentsScreen';
 import RepairsScreen from './screens/RepairsScreen';
 import ReportingScreen from './screens/ReportingScreen';
 import ContractorsScreen from './screens/ContractorsScreen';
-import NotificationsScreen from './screens/NotificationsScreen'; // Import new screen
+import NotificationsScreen from './screens/NotificationsScreen';
 import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon, BellIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
@@ -14,207 +15,151 @@ import ShareDataModal from './screens/ShareDataModal';
 import DatabaseSelectionScreen from './screens/DatabaseSelectionScreen';
 import { useAppContext } from './contexts/AppContext';
 
-type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications'; // Add notifications tab
+type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications';
 export type ReportFilter = { 
   status?: 'all' | 'collected' | 'outstanding';
   repairStatus?: 'all' | 'open' | 'completed';
 };
 export type EditTarget = { type: 'payment' | 'repair', id: string };
 
-
 const App: React.FC = () => {
+  const { authStatus, user, isReadOnly, logout, activeDbOwner } = useAuth();
+  const { notifications } = useAppContext();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [action, setAction] = useState<string | null>(null);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [initialReportFilter, setInitialReportFilter] = useState<ReportFilter | null>(null);
+  const [reportFilter, setReportFilter] = useState<ReportFilter | null>(null);
+  const [action, setAction] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
-  const { authStatus, user, logout, isReadOnly, activeDbOwner } = useAuth();
-  const { notifications } = useAppContext(); // Get notifications for badge
+  const audioRef = useRef<HTMLAudioElement>(null);
 
-  const unreadCount = useMemo(() => {
-    if (!user || !notifications) return 0;
+  const unacknowledgedCount = useMemo(() => {
+    if (!user) return 0;
     return notifications.filter(n => n.recipientEmail.toLowerCase() === user.email.toLowerCase() && !n.isAcknowledged).length;
   }, [notifications, user]);
 
-  const revisionNumber = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    return `rev.${year}.${month}.${day}.${hours}${minutes}${seconds}`;
-  }, []);
-
-  if (authStatus === 'idle') {
-    return <LoginScreen />;
-  }
-
-  if (authStatus === 'loading') {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading application...</p>
-      </div>
-    );
-  }
-
-  if (authStatus === 'selecting_db') {
-    return <DatabaseSelectionScreen />;
-  }
-  
-  const handleAction = (tab: Tab, actionName: string = 'add') => {
+  const handleAction = (tab: Tab, action?: string) => {
+    setAction(action || null);
     setActiveTab(tab);
-    setAction(actionName);
   };
   
-  const handleNavigateToReport = (filter: ReportFilter) => {
-    setInitialReportFilter(filter);
-    setActiveTab('reporting');
-  };
-
-  const handleEditFromReport = (target: EditTarget) => {
+  const handleEditItem = (target: EditTarget) => {
     setEditTarget(target);
     setActiveTab(target.type === 'payment' ? 'payments' : 'repairs');
-  };
+  }
 
-  const onActionDone = () => {
+  const handleActionDone = () => {
     setAction(null);
     setEditTarget(null);
   };
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
-      case 'properties':
-        return <PropertiesScreen action={action} onActionDone={onActionDone} />;
-      case 'payments':
-        return <PaymentsScreen action={action} editTarget={editTarget} onActionDone={onActionDone} />;
-      case 'repairs':
-        return <RepairsScreen action={action} editTarget={editTarget} onActionDone={onActionDone} />;
-      case 'contractors':
-        return <ContractorsScreen />;
-      case 'reporting':
-        return <ReportingScreen 
-                  initialFilter={initialReportFilter} 
-                  onFilterApplied={() => setInitialReportFilter(null)} 
-                  onEditItem={handleEditFromReport}
-                />;
-      case 'notifications': // Add case for notifications
-        return <NotificationsScreen />;
-      default:
-        return <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />;
-    }
+  
+  const handleNavigateToReport = (filter: ReportFilter) => {
+    setReportFilter(filter);
+    setActiveTab('reporting');
   };
 
-  const NavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactNode }> = ({ tabName, label, icon }) => (
-    <button
-      onClick={() => setActiveTab(tabName)}
-      className={`relative flex flex-col items-center justify-center w-full pt-2 pb-1 text-xs transition-colors duration-200 ${
-        activeTab === tabName ? 'text-blue-600' : 'text-gray-500 hover:text-blue-500'
-      }`}
-    >
-      {icon}
-      <span className="mt-1">{label}</span>
-    </button>
-  );
+  const onFilterApplied = useCallback(() => {
+    setReportFilter(null);
+  }, []);
+  
+  // Custom hook to play notification sound
+  useEffect(() => {
+    const playSound = () => {
+      audioRef.current?.play().catch(e => console.error("Audio play failed:", e));
+    };
+    window.addEventListener('play-notification-sound', playSound);
+    return () => {
+      window.removeEventListener('play-notification-sound', playSound);
+    };
+  }, []);
 
-  const SideNavItem: React.FC<{ tabName: Tab; label: string; icon: React.ReactElement<{ className?: string }>; hasBadge?: boolean; }> = ({ tabName, label, icon, hasBadge }) => (
-    <button
-      onClick={() => setActiveTab(tabName)}
-      className={`relative flex items-center w-full px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-colors duration-200 ${
-        activeTab === tabName ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-slate-200 hover:text-gray-900'
-      }`}
-    >
-      {React.cloneElement(icon, { className: 'w-5 h-5 mr-3 flex-shrink-0' })}
-      <span>{label}</span>
-      {hasBadge && (
-        <span className="absolute left-7 top-1.5 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
-      )}
-    </button>
-  );
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: ChartPieIcon },
+    { id: 'properties', label: 'Properties', icon: BuildingOfficeIcon },
+    { id: 'payments', label: 'Payments', icon: CreditCardIcon },
+    { id: 'repairs', label: 'Repairs', icon: WrenchScrewdriverIcon },
+    { id: 'contractors', label: 'Contractors', icon: UsersIcon },
+    { id: 'reporting', label: 'Reporting', icon: DocumentChartBarIcon },
+    { id: 'notifications', label: 'Notifications', icon: BellIcon, badge: unacknowledgedCount },
+  ];
+
+  if (authStatus === 'idle' || authStatus === 'loading') {
+    return <LoginScreen />;
+  }
+  if (authStatus === 'selecting_db') {
+    return <DatabaseSelectionScreen />;
+  }
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-gray-800 flex flex-col">
-       {isReadOnly && activeDbOwner && (
-        <div className="bg-yellow-400 text-center py-2 px-4 text-sm font-semibold text-yellow-900">
-          You are viewing {activeDbOwner.name}'s ({activeDbOwner.email}) database in Read-Only mode.
+    <>
+    <div className="flex h-screen bg-gray-100 font-sans">
+      <aside className="w-64 bg-slate-800 text-white flex flex-col">
+        <div className="px-6 py-4 border-b border-slate-700">
+          <h1 className="text-2xl font-bold tracking-tight">PMPR</h1>
+          <p className="text-xs text-slate-400">Property Management</p>
         </div>
-      )}
-      <header className="bg-white shadow-md sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-blue-800 tracking-tight">PMPR App</h1>
-            <div className="flex items-center gap-4">
-               {authStatus === 'authenticated' && !isReadOnly && (
-                 <button 
-                    onClick={() => setIsShareModalOpen(true)} 
-                    className="text-gray-500 hover:text-blue-600 transition-colors" 
-                    aria-label="Share Data"
-                    title="Share Your Properties (Read-Only)"
-                 >
-                     <ShareIcon className="w-6 h-6" />
-                 </button>
-               )}
-               <button onClick={() => setIsHelpModalOpen(true)} className="text-gray-500 hover:text-blue-600 transition-colors" aria-label="Help">
-                   <QuestionMarkCircleIcon className="w-6 h-6" />
-               </button>
-               <div className="text-right">
-                 <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <UserCircleIcon className="w-6 h-6 text-gray-400" />
-                    {user ? user.name : 'Guest'}
-                 </div>
-                 <div className="text-xs text-gray-500">
-                    {user ? user.email : 'Local Session'}
-                 </div>
-               </div>
-               <button onClick={logout} className="px-3 py-1.5 text-sm font-medium bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 transition-colors">
-                 Logout
-               </button>
+        <nav className="flex-1 px-4 py-4 space-y-2">
+          {navItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id as Tab)}
+              className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors group ${activeTab === item.id ? 'bg-slate-900 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}
+            >
+              <item.icon className={`mr-3 h-6 w-6 ${activeTab === item.id ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-300'}`} />
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.badge && item.badge > 0 && <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">{item.badge}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="px-4 py-4 border-t border-slate-700">
+          <div className="flex items-center gap-3 px-2 py-2">
+            <UserCircleIcon className="w-10 h-10 text-slate-400" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold">{user?.name || 'Guest User'}</p>
+              <p className="text-xs text-slate-400">{user?.email || 'guest@local.com'}</p>
+              {isReadOnly && activeDbOwner && <p className="text-xs text-yellow-400 font-bold">Viewing: {activeDbOwner.name}</p>}
             </div>
           </div>
-        </div>
-      </header>
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-grow w-full">
-        <aside className="hidden md:block w-56 flex-shrink-0 py-8 pr-8">
-            <nav className="space-y-1">
-                <SideNavItem tabName="dashboard" label="Dashboard" icon={<ChartPieIcon />} />
-                <SideNavItem tabName="properties" label="Properties" icon={<BuildingOfficeIcon />} />
-                <SideNavItem tabName="payments" label="Payments" icon={<CreditCardIcon />} />
-                <SideNavItem tabName="repairs" label="Repairs" icon={<WrenchScrewdriverIcon />} />
-                <SideNavItem tabName="contractors" label="Contractors" icon={<UsersIcon />} />
-                <SideNavItem tabName="reporting" label="Reporting" icon={<DocumentChartBarIcon />} />
-                <SideNavItem tabName="notifications" label="Notifications" icon={<BellIcon />} hasBadge={unreadCount > 0} />
-            </nav>
-        </aside>
-        
-        <main className="flex-1 min-w-0 py-8 pb-24 md:pb-8">
-          {renderContent()}
-        </main>
-      </div>
-      
-      <footer className="w-full flex justify-between items-center text-xs text-gray-500 py-4 px-4 sm:px-6 lg:px-8 pb-20 md:pb-4">
-        <span>© 2025 C&SH Group Properties, LLC. Created for free using Google AIStudio and Render.com</span>
-        <span>{revisionNumber}</span>
-      </footer>
-
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg flex justify-around md:hidden">
-        <NavItem tabName="dashboard" label="Dashboard" icon={<ChartPieIcon className="w-6 h-6" />} />
-        <NavItem tabName="properties" label="Properties" icon={<BuildingOfficeIcon className="w-6 h-6" />} />
-        <NavItem tabName="payments" label="Payments" icon={<CreditCardIcon className="w-6 h-6" />} />
-        <NavItem tabName="notifications" label="Notifications" icon={
-          <div className="relative">
-            <BellIcon className="w-6 h-6" />
-            {unreadCount > 0 && <span className="absolute -top-1 -right-1 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>}
+          <div className="mt-2 space-y-2">
+             {!isReadOnly && user && (
+                 <button onClick={() => setIsShareModalOpen(true)} className="w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-700 hover:text-white">
+                    <ShareIcon className="w-5 h-5 mr-3"/>
+                    Share Data
+                </button>
+             )}
+             <button onClick={() => setIsHelpModalOpen(true)} className="w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-700 hover:text-white">
+                <QuestionMarkCircleIcon className="w-5 h-5 mr-3"/>
+                Help
+            </button>
           </div>
-        } />
-      </nav>
-      <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
-       {authStatus === 'authenticated' && !isReadOnly && <ShareDataModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />}
+          {authStatus !== 'guest' && (
+            <button onClick={logout} className="mt-2 w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-red-800 rounded-md">Logout</button>
+          )}
+        </div>
+      </aside>
+
+      <main className="flex-1 p-6 overflow-y-auto">
+        {activeTab === 'dashboard' && <DashboardScreen onAction={handleAction} onNavigateToReport={handleNavigateToReport} />}
+        {activeTab === 'properties' && <PropertiesScreen action={action} onActionDone={handleActionDone} />}
+        {activeTab === 'payments' && <PaymentsScreen action={action} editTarget={editTarget} onActionDone={handleActionDone} />}
+        {activeTab === 'repairs' && <RepairsScreen action={action} editTarget={editTarget} onActionDone={handleActionDone} />}
+        {activeTab === 'contractors' && <ContractorsScreen />}
+        {activeTab === 'reporting' && <ReportingScreen initialFilter={reportFilter} onFilterApplied={onFilterApplied} onEditItem={handleEditItem} />}
+        {activeTab === 'notifications' && <NotificationsScreen />}
+      </main>
     </div>
+    {isHelpModalOpen && <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />}
+    {isShareModalOpen && <ShareDataModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />}
+    {isReadOnly && activeDbOwner && (
+        <div className="fixed top-0 left-0 right-0 bg-yellow-400 text-yellow-900 text-center text-sm font-semibold p-2 z-50">
+            You are viewing {activeDbOwner.name}'s ({activeDbOwner.email}) database in Read-Only mode.
+        </div>
+    )}
+    <footer className="w-full bg-slate-100 p-4 text-xs text-gray-500 text-center">
+      © 2025 C&SH Group Properties, LLC. Created for free using Google AIStudio and Render.com
+    </footer>
+     <audio ref={audioRef} src="data:audio/mpeg;base64,SUQzBAAAAAAAI..."></audio>
+    </>
   );
 };
 

@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 // This component is no longer used as the dynamic Firebase configuration feature has been removed

@@ -1,9 +1,12 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { BellIcon, CheckCircleIcon, TrashIcon } from '../components/Icons';
 import { Notification } from '../types';
+import useLocalStorage from '../hooks/useLocalStorage';
+
 
 const NotificationsScreen: React.FC = () => {
     const { notifications, addNotification, updateNotification, deleteNotification, isUserPropertyOwner } = useAppContext();
@@ -13,6 +16,7 @@ const NotificationsScreen: React.FC = () => {
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
     const [isSending, setIsSending] = useState(false);
+    const [soundEnabled, setSoundEnabled] = useLocalStorage('pmpr_notification_sound_enabled', true);
 
     const { received, sent } = useMemo(() => {
         if (!user) return { received: [], sent: [] };
@@ -53,7 +57,7 @@ const NotificationsScreen: React.FC = () => {
                 return;
             }
 
-            addNotification({ recipientEmail: recipientEmail.toLowerCase(), message });
+            await addNotification({ recipientEmail: recipientEmail.toLowerCase(), message });
             setRecipientEmail('');
             setMessage('');
             setActiveTab('sent');
@@ -115,6 +119,7 @@ const NotificationsScreen: React.FC = () => {
     );
 
     return (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-2 space-y-6">
                 <Card>
@@ -145,6 +150,27 @@ const NotificationsScreen: React.FC = () => {
                 </Card>
             </div>
             <div className="space-y-6">
+                <Card>
+                    <CardHeader><h3 className="font-semibold text-lg">Notification Settings</h3></CardHeader>
+                    <CardContent>
+                        <div className="flex justify-between items-center">
+                            <label htmlFor="sound-toggle" className="font-medium text-gray-700 cursor-pointer">
+                                Enable notification sound
+                            </label>
+                            <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                                <input
+                                    type="checkbox"
+                                    name="sound-toggle"
+                                    id="sound-toggle"
+                                    checked={soundEnabled}
+                                    onChange={() => setSoundEnabled(!soundEnabled)}
+                                    className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+                                />
+                                <label htmlFor="sound-toggle" className="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardHeader><h3 className="font-semibold text-lg">Compose Notification</h3></CardHeader>
                     <CardContent>
@@ -182,6 +208,17 @@ const NotificationsScreen: React.FC = () => {
                 </Card>
             </div>
         </div>
+        <style>{`
+            .toggle-checkbox:checked {
+                right: 0;
+                border-color: #3b82f6; /* blue-500 */
+                transform: translateX(100%);
+            }
+            .toggle-checkbox:checked + .toggle-label {
+                background-color: #3b82f6; /* blue-500 */
+            }
+        `}</style>
+      </>
     );
 };
 
