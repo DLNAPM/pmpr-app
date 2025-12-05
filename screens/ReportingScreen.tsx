@@ -75,7 +75,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     const handleConfirmImport = () => { if (!importPreview) return; for (const record of importPreview.validRecords) { const property = properties.find(p => p.name === record['Property Name']); if (!property) continue; const date = new Date(record.Date); const year = date.getFullYear(); const month = date.getMonth() + 1; if (record.Type === 'Repair') { addRepair({ propertyId: property.id, description: record.Category, cost: Number(record['Bill Amount']), status: Number(record['Paid Amount']) > 0 ? RepairStatus.COMPLETE : RepairStatus.PENDING_REPAIRMEN, requestDate: date.toISOString() }); } else { const existing = payments.find(p => p.propertyId === property.id && p.year === year && p.month === month); if (existing) { const updated = { ...existing }; if (record.Type === 'Rent') { updated.rentBillAmount = Number(record['Bill Amount']); updated.rentPaidAmount = Number(record['Paid Amount']); } else { const util = updated.utilities.find(u => u.category === record.Category); if (util) { util.billAmount = Number(record['Bill Amount']); util.paidAmount = Number(record['Paid Amount']); } else { updated.utilities.push({ category: record.Category, billAmount: Number(record['Bill Amount']), paidAmount: Number(record['Paid Amount']) }); } } updatePayment(updated); } else { addPayment({ propertyId: property.id, year, month, rentBillAmount: record.Type === 'Rent' ? Number(record['Bill Amount']) : 0, rentPaidAmount: record.Type === 'Rent' ? Number(record['Paid Amount']) : 0, utilities: record.Type === 'Utility' ? [{ category: record.Category, billAmount: Number(record['Bill Amount']), paidAmount: Number(record['Paid Amount'])}] : [], }); } } } alert(`${importPreview.validRecords.length} records imported successfully.`); setIsImportModalOpen(false); setImportPreview(null); };
     
     const handleReconcile = () => {
-        // FIX: Explicitly typed the accumulator in `reduce` to ensure correct type inference, resolving errors where properties like `.length` and `.sort` were not found on `unknown` type.
+        // Fix: Explicitly typed the accumulator in `reduce` to ensure correct type inference, resolving errors where properties like `.length` and `.sort` were not found on `unknown` type.
         const paymentGroups = Object.values(
             payments.reduce((acc: Record<string, Payment[]>, p) => {
                 const key = `${p.propertyId}-${p.year}-${p.month}`;
@@ -85,7 +85,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
             }, {})
         ).filter(group => group.length > 1);
 
-        // FIX: Explicitly typed the accumulator in `reduce` to ensure correct type inference, resolving errors where properties like `.length` and `.sort` were not found on `unknown` type.
+        // Fix: Explicitly typed the accumulator in `reduce` to ensure correct type inference, resolving errors where properties like `.length` and `.sort` were not found on `unknown` type.
         const repairGroups = Object.values(
             repairs.reduce((acc: Record<string, Repair[]>, r) => {
                 const key = `${r.propertyId}-${r.description}-${r.cost}-${new Date(
