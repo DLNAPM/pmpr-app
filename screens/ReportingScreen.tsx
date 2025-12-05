@@ -73,7 +73,37 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = e => processCsv(e.target?.result as string); reader.readAsText(file); } if(fileInputRef.current) fileInputRef.current.value = ""; };
     const processCsv = (csvText: string) => { const lines = csvText.split(/\r\n|\n/).filter(line => line.trim()); const headers = lines[0].split(',').map(h => h.trim()); const preview: ImportPreview = { validRecords: [], errors: [] }; for (let i = 1; i < lines.length; i++) { const values = lines[i].split(','); const record = headers.reduce((obj: Record<string, any>, header, index) => { const value = values[index]?.trim(); if (header === 'Bill Amount' || header === 'Paid Amount') { obj[header] = Number(value) || 0; } else { obj[header] = value; } return obj; }, {}) as CsvRow; if (!properties.some(p => p.name === record['Property Name'])) { preview.errors.push({ row: i + 1, message: `Property "${record['Property Name']}" not found.` }); continue; } preview.validRecords.push(record); } setImportPreview(preview); setIsImportModalOpen(true); };
     const handleConfirmImport = () => { if (!importPreview) return; for (const record of importPreview.validRecords) { const property = properties.find(p => p.name === record['Property Name']); if (!property) continue; const date = new Date(record.Date); const year = date.getFullYear(); const month = date.getMonth() + 1; if (record.Type === 'Repair') { addRepair({ propertyId: property.id, description: record.Category, cost: Number(record['Bill Amount']), status: Number(record['Paid Amount']) > 0 ? RepairStatus.COMPLETE : RepairStatus.PENDING_REPAIRMEN, requestDate: date.toISOString() }); } else { const existing = payments.find(p => p.propertyId === property.id && p.year === year && p.month === month); if (existing) { const updated = { ...existing }; if (record.Type === 'Rent') { updated.rentBillAmount = Number(record['Bill Amount']); updated.rentPaidAmount = Number(record['Paid Amount']); } else { const util = updated.utilities.find(u => u.category === record.Category); if (util) { util.billAmount = Number(record['Bill Amount']); util.paidAmount = Number(record['Paid Amount']); } else { updated.utilities.push({ category: record.Category, billAmount: Number(record['Bill Amount']), paidAmount: Number(record['Paid Amount']) }); } } updatePayment(updated); } else { addPayment({ propertyId: property.id, year, month, rentBillAmount: record.Type === 'Rent' ? Number(record['Bill Amount']) : 0, rentPaidAmount: record.Type === 'Rent' ? Number(record['Paid Amount']) : 0, utilities: record.Type === 'Utility' ? [{ category: record.Category, billAmount: Number(record['Bill Amount']), paidAmount: Number(record['Paid Amount'])}] : [], }); } } } alert(`${importPreview.validRecords.length} records imported successfully.`); setIsImportModalOpen(false); setImportPreview(null); };
-    const handleReconcile = () => { const paymentGroups = Object.values(payments.reduce((acc, p) => { const key = `${p.propertyId}-${p.year}-${p.month}`; if (!acc[key]) acc[key] = []; acc[key].push(p); return acc; }, {} as Record<string, Payment[]>)).filter(group => group.length > 1); const repairGroups = Object.values(repairs.reduce((acc, r) => { const key = `${r.propertyId}-${r.description}-${r.cost}-${new Date(r.requestDate).toLocaleDateString()}`; if (!acc[key]) acc[key] = []; acc[key].push(r); return acc; }, {} as Record<string, Repair[]>)).filter(group => group.length > 1); setDuplicatePayments(paymentGroups); setDuplicateRepairs(repairGroups); const initialSelections: Record<string, string> = {}; paymentGroups.forEach((group, index) => { const best = group.sort((a,b) => (b.paymentDate ? 1: -1) - (a.paymentDate ? 1 : -1) )[0]; initialSelections[`payment-${index}`] = best.id; }); repairGroups.forEach((group, index) => { const best = group.sort((a,b) => (b.completionDate ? 1: -1) - (a.completionDate ? 1 : -1) )[0]; initialSelections[`repair-${index}`] = best.id; }); setSelections(initialSelections); setIsReconcileModalOpen(true); };
+    
+    // FIX: Explicitly typed the accumulator in `reduce` to ensure correct type inference, resolving errors where properties like `.length` and `.sort` were not found on `unknown` type. Also formatted for readability.
+    const handleReconcile = () => {
+        const paymentGroups = Object.values(payments.reduce((acc: Record<string, Payment[]>, p) => {
+            const key = `${p.propertyId}-${p.year}-${p.month}`;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(p);
+            return acc;
+        }, {})).filter(group => group.length > 1);
+
+        const repairGroups = Object.values(repairs.reduce((acc: Record<string, Repair[]>, r) => {
+            const key = `${r.propertyId}-${r.description}-${r.cost}-${new Date(r.requestDate).toLocaleDateString()}`;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(r);
+            return acc;
+        }, {})).filter(group => group.length > 1);
+
+        setDuplicatePayments(paymentGroups);
+        setDuplicateRepairs(repairGroups);
+        const initialSelections: Record<string, string> = {};
+        paymentGroups.forEach((group, index) => {
+            const best = group.sort((a, b) => (b.paymentDate ? 1 : -1) - (a.paymentDate ? 1 : -1))[0];
+            initialSelections[`payment-${index}`] = best.id;
+        });
+        repairGroups.forEach((group, index) => {
+            const best = group.sort((a, b) => (b.completionDate ? 1 : -1) - (a.completionDate ? 1 : -1))[0];
+            initialSelections[`repair-${index}`] = best.id;
+        });
+        setSelections(initialSelections);
+        setIsReconcileModalOpen(true);
+    };
     const handleConfirmReconciliation = () => { const recordsToDelete: {type: 'payment' | 'repair', id: string}[] = []; duplicatePayments.forEach((group, index) => { const keepId = selections[`payment-${index}`]; group.forEach(p => { if (p.id !== keepId) recordsToDelete.push({type: 'payment', id: p.id}) }); }); duplicateRepairs.forEach((group, index) => { const keepId = selections[`repair-${index}`]; group.forEach(r => { if (r.id !== keepId) recordsToDelete.push({type: 'repair', id: r.id}) }); }); if (window.confirm(`Are you sure you want to delete ${recordsToDelete.length} duplicate record(s)? This action cannot be undone.`)) { recordsToDelete.forEach(record => { if (record.type === 'payment') deletePayment(record.id); else deleteRepair(record.id); }); alert(`${recordsToDelete.length} records deleted.`); setIsReconcileModalOpen(false); } };
 
     return (
