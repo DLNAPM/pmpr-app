@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useMemo, useState, useEffect, useRef } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification } from '../types';
