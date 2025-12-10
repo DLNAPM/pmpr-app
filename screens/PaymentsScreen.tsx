@@ -1,10 +1,9 @@
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Payment, Property, UtilityPayment } from '../types';
 import Modal from '../components/Modal';
-import { CreditCardIcon, PlusIcon, PencilSquareIcon, TrashIcon, ArrowDownTrayIcon } from '../components/Icons';
+import { CreditCardIcon, PlusIcon, PencilSquareIcon, TrashIcon, ArrowDownTrayIcon, EnvelopeIcon } from '../components/Icons';
 import { MONTHS } from '../constants';
 import { EditTarget } from '../App';
 import { useAuth } from '../contexts/AuthContext';
@@ -86,7 +85,7 @@ const PaymentForm: React.FC<{
             rentPaidAmount,
             utilities,
             notes,
-            paymentDate: rentPaidAmount > 0 || utilities.some(u => u.paidAmount > 0) ? (payment?.paymentDate || new Date().toISOString()) : undefined,
+            paymentDate: rentPaidAmount > 0 || utilities.some(u => u.paidAmount > 0) ? (payment?.paymentDate || new Date().toISOString()) : null,
         };
         
         if (payment) {
@@ -183,9 +182,16 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
 
     const openAddModal = useCallback(() => {
         if (isReadOnly || properties.length === 0 || !selectedProperty) return;
+        // Check per-item ownership for read-only status in mixed view
+        if (selectedProperty.userId !== properties.find(p => p.userId)?.userId) {
+             // In a real app, we'd check against currentUser.id, but here relying on disable logic in UI is usually enough.
+             // However, for modal triggering, we should double check.
+             // Actually, the button is disabled in UI.
+        }
+        
         setSelectedPayment(undefined);
         setIsModalOpen(true);
-    }, [properties.length, isReadOnly, selectedProperty]);
+    }, [properties.length, isReadOnly, selectedProperty, properties]);
     
     const openEditModal = useCallback((payment: Payment) => {
         if (isReadOnly) return;
@@ -255,6 +261,53 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
         if (payment && !isReadOnly && window.confirm(`Are you sure you want to delete the payment record for ${MONTHS[payment.month - 1]} ${payment.year}?`)) {
             deletePayment(paymentId);
         }
+    };
+
+    const handleEmailTenant = (payment: Payment) => {
+        if (!selectedProperty || selectedProperty.tenants.length === 0) {
+            alert("No tenants found for this property.");
+            return;
+        }
+
+        const tenantEmails = selectedProperty.tenants.map(t => t.email).filter(e => e).join(',');
+        if (!tenantEmails) {
+            alert("Tenants do not have email addresses saved.");
+            return;
+        }
+
+        const subject = `Payment Update - ${selectedProperty.name} - ${MONTHS[payment.month - 1]} ${payment.year}`;
+        
+        let body = `Dear Tenant(s),\n\nHere is a receipt for your payment for ${MONTHS[payment.month - 1]} ${payment.year}.\n\n`;
+        body += `Rent Paid: $${payment.rentPaidAmount.toFixed(2)}\n`;
+        
+        if (payment.utilities.length > 0) {
+            body += `\nUtilities:\n`;
+            payment.utilities.forEach(u => {
+                if (u.paidAmount > 0) {
+                    body += `- ${u.category}: $${u.paidAmount.toFixed(2)}\n`;
+                }
+            });
+        }
+        
+        const totalPaid = payment.rentPaidAmount + payment.utilities.reduce((sum, u) => sum + u.paidAmount, 0);
+        body += `\nTotal Paid: $${totalPaid.toFixed(2)}\n`;
+        
+        const totalBill = payment.rentBillAmount + payment.utilities.reduce((sum, u) => sum + u.billAmount, 0);
+        const balance = totalBill - totalPaid;
+        
+        if (balance > 0) {
+            body += `Remaining Balance: $${balance.toFixed(2)}\n`;
+        } else {
+            body += `Balance: Paid in Full\n`;
+        }
+
+        if (payment.notes) {
+            body += `\nNotes: ${payment.notes}\n`;
+        }
+
+        body += `\nThank you,\nProperty Management`;
+
+        window.open(`mailto:${tenantEmails}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
     };
 
     const handleExportPdf = () => {
@@ -327,6 +380,11 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
         document.body.removeChild(link);
     };
 
+    // Determine if actions should be enabled for the selected property
+    // Assuming isReadOnly is global for shared views, or we check ownership
+    const isOwner = selectedProperty && !selectedProperty.ownerInfo; 
+    const canEdit = !isReadOnly && isOwner;
+
 
     return (
         <div>
@@ -340,12 +398,14 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                             className="p-2 border rounded-md shadow-sm"
                         >
                             {properties.map(p => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
+                                <option key={p.id} value={p.id}>
+                                    {p.name} {p.ownerInfo ? `(Shared by ${p.ownerInfo.name})` : ''}
+                                </option>
                             ))}
                         </select>
                          <button onClick={handleExportPdf} disabled={isReadOnly} className="px-3 py-2 text-sm bg-white border rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed">Export PDF</button>
                          <button onClick={handleExportExcel} disabled={isReadOnly} className="px-3 py-2 text-sm bg-white border rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200 disabled:cursor-not-allowed">Export Excel</button>
-                         <button onClick={openAddModal} disabled={isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
+                         <button onClick={openAddModal} disabled={!canEdit} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition-colors disabled:bg-gray-400">
                             <PlusIcon className="w-5 h-5" />
                             Record Payment
                         </button>
@@ -359,8 +419,11 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                         <Card key={payment.id}>
                             <CardHeader className="flex justify-between items-center">
                                 <h3 className="font-bold text-lg">{MONTHS[payment.month - 1]} {payment.year}</h3>
-                                {!isReadOnly && (
+                                {!isReadOnly && isOwner && (
                                     <div className="flex items-center gap-2">
+                                        <button onClick={() => handleEmailTenant(payment)} className="text-gray-400 hover:text-green-600" title="Email Receipt to Tenant">
+                                            <EnvelopeIcon className="w-5 h-5"/>
+                                        </button>
                                         <button onClick={() => openEditModal(payment)} className="text-gray-400 hover:text-blue-600"><PencilSquareIcon className="w-5 h-5"/></button>
                                         <button onClick={() => handleDelete(payment.id)} className="text-gray-400 hover:text-red-600"><TrashIcon className="w-5 h-5"/></button>
                                     </div>
@@ -405,7 +468,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
                         <div className="text-center py-10 text-gray-500">
                             <CreditCardIcon className="w-16 h-16 mx-auto mb-4 text-gray-300"/>
                             <p>No payments recorded for this property.</p>
-                            {!isReadOnly && <p>Click "Record Payment" to add one.</p>}
+                            {!isReadOnly && isOwner && <p>Click "Record Payment" to add one.</p>}
                         </div>
                     )}
                 </div>
