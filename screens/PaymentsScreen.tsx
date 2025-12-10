@@ -281,9 +281,18 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
 
         let rentLine = `Rent Due: ${formatMoney(payment.rentBillAmount)}    Rent Paid: ${formatMoney(payment.rentPaidAmount)}`;
         
-        let utilsDue = payment.utilities.reduce((sum, u) => sum + u.billAmount, 0);
+        // Detailed utility breakdown
+        let utilsText = 'Utilities:\n';
+        if (payment.utilities.length > 0) {
+            payment.utilities.forEach(u => {
+                utilsText += `- ${u.category}: Due ${formatMoney(u.billAmount)} | Paid ${formatMoney(u.paidAmount)}\n`;
+            });
+        } else {
+            utilsText += 'No utilities tracked.\n';
+        }
+
         let utilsPaid = payment.utilities.reduce((sum, u) => sum + u.paidAmount, 0);
-        let utilsLine = `Utilities Due: ${formatMoney(utilsDue)}    Utilities Paid: ${formatMoney(utilsPaid)}`;
+        let utilsDue = payment.utilities.reduce((sum, u) => sum + u.billAmount, 0);
 
         const totalPaid = payment.rentPaidAmount + utilsPaid;
         const totalBill = payment.rentBillAmount + utilsDue;
@@ -291,7 +300,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
 
         let body = `Dear Tenant(s),\n\nHere is the current status for your payment for ${MONTHS[payment.month - 1]} ${payment.year}.\n\n`;
         body += `${rentLine}\n\n`;
-        body += `${utilsLine}\n\n`;
+        body += `${utilsText}\n`;
         body += `Total Paid: ${formatMoney(totalPaid)}\n`;
         body += `Remaining Balance for the month: ${formatMoney(balance)}\n`;
 
