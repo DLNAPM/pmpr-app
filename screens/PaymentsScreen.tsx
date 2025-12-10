@@ -277,29 +277,23 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
 
         const subject = `Payment Update - ${selectedProperty.name} - ${MONTHS[payment.month - 1]} ${payment.year}`;
         
-        let body = `Dear Tenant(s),\n\nHere is a receipt for your payment for ${MONTHS[payment.month - 1]} ${payment.year}.\n\n`;
-        body += `Rent Paid: $${payment.rentPaidAmount.toFixed(2)}\n`;
+        const formatMoney = (amount: number) => `$${amount.toFixed(2)}`;
+
+        let rentLine = `Rent Due: ${formatMoney(payment.rentBillAmount)}    Rent Paid: ${formatMoney(payment.rentPaidAmount)}`;
         
-        if (payment.utilities.length > 0) {
-            body += `\nUtilities:\n`;
-            payment.utilities.forEach(u => {
-                if (u.paidAmount > 0) {
-                    body += `- ${u.category}: $${u.paidAmount.toFixed(2)}\n`;
-                }
-            });
-        }
-        
-        const totalPaid = payment.rentPaidAmount + payment.utilities.reduce((sum, u) => sum + u.paidAmount, 0);
-        body += `\nTotal Paid: $${totalPaid.toFixed(2)}\n`;
-        
-        const totalBill = payment.rentBillAmount + payment.utilities.reduce((sum, u) => sum + u.billAmount, 0);
+        let utilsDue = payment.utilities.reduce((sum, u) => sum + u.billAmount, 0);
+        let utilsPaid = payment.utilities.reduce((sum, u) => sum + u.paidAmount, 0);
+        let utilsLine = `Utilities Due: ${formatMoney(utilsDue)}    Utilities Paid: ${formatMoney(utilsPaid)}`;
+
+        const totalPaid = payment.rentPaidAmount + utilsPaid;
+        const totalBill = payment.rentBillAmount + utilsDue;
         const balance = totalBill - totalPaid;
-        
-        if (balance > 0) {
-            body += `Remaining Balance: $${balance.toFixed(2)}\n`;
-        } else {
-            body += `Balance: Paid in Full\n`;
-        }
+
+        let body = `Dear Tenant(s),\n\nHere is the current status for your payment for ${MONTHS[payment.month - 1]} ${payment.year}.\n\n`;
+        body += `${rentLine}\n\n`;
+        body += `${utilsLine}\n\n`;
+        body += `Total Paid: ${formatMoney(totalPaid)}\n`;
+        body += `Remaining Balance for the month: ${formatMoney(balance)}\n`;
 
         if (payment.notes) {
             body += `\nNotes: ${payment.notes}\n`;
