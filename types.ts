@@ -68,6 +68,7 @@ export interface Property {
   rentAmount: number; // This is the standard monthly rent bill amount
   utilitiesToTrack: string[];
   userId: string;
+  ownerInfo?: { name: string; email: string }; // Optional field to display owner info for shared properties
 }
 
 export interface DBOwner {

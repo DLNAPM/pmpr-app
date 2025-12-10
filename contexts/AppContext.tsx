@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useMemo, useState, useEffect, useRef } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification } from '../types';
@@ -57,6 +58,21 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+// Helper function to remove undefined values from objects before saving to Firestore
+const sanitizeData = (data: any): any => {
+  if (Array.isArray(data)) {
+    return data.map(sanitizeData);
+  } else if (data !== null && typeof data === 'object') {
+    return Object.entries(data).reduce((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = sanitizeData(value);
+      }
+      return acc;
+    }, {} as any);
+  }
+  return data;
+};
 
 const recalculateNextMonthBalance = async ( changedPayment: Payment | { propertyId: string; year: number; month: number }, allPayments: Payment[], allProperties: Property[], updateFn: (payment: Payment) => void, isDeletion: boolean = false ) => {
     const { propertyId, year, month } = changedPayment;
@@ -199,6 +215,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                      unsubs.push(db.collection('properties').where(firebase.firestore.FieldPath.documentId(), 'in', sharedPropertyIds).onSnapshot((s: any) => setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
                      unsubs.push(db.collection('payments').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
                      unsubs.push(db.collection('repairs').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
+                     // Contractors are not strictly tied to property IDs but to user IDs. For granular sharing, we fetch all contractors of the owner.
                      unsubs.push(db.collection('contractors').where('userId', '==', activeDbOwner.id).onSnapshot((s: any) => setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
                 }
             } else { // Viewing own database
@@ -214,25 +231,25 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     }, [user, isReadOnly, activeDbOwner]);
     
     // All write operations are guarded by the isReadOnly flag.
-    const addProperty = (p: Omit<Property, 'id' | 'userId'>) => { if (!isReadOnly) db.collection('properties').add({ ...p, userId: user.id }); };
-    const updateProperty = (up: Property) => { if (!isReadOnly) { const { id, ...data } = up; db.collection('properties').doc(id).set(data, { merge: true }); }};
+    const addProperty = (p: Omit<Property, 'id' | 'userId'>) => { if (!isReadOnly) db.collection('properties').add(sanitizeData({ ...p, userId: user.id })); };
+    const updateProperty = (up: Property) => { if (!isReadOnly) { const { id, ...data } = up; db.collection('properties').doc(id).set(sanitizeData(data), { merge: true }); }};
     const deleteProperty = async (id: string) => { if(!isReadOnly) { const batch = db.batch(); const pQuery = await db.collection('payments').where('propertyId', '==', id).get(); pQuery.forEach((doc: any) => batch.delete(doc.ref)); const rQuery = await db.collection('repairs').where('propertyId', '==', id).get(); rQuery.forEach((doc: any) => batch.delete(doc.ref)); const propRef = db.collection('properties').doc(id); batch.delete(propRef); await batch.commit(); }};
     
-    const updatePaymentFirestore = (up: Payment) => { if (!isReadOnly) db.collection('payments').doc(up.id).set(up, { merge: true }); };
-    const addPayment = async (p: Omit<Payment, 'id'| 'userId'>) => { if(!isReadOnly) { const ref = await db.collection('payments').add({ ...p, userId: user.id }); const final = { ...p, id: ref.id, userId: user.id }; recalculateNextMonthBalance(final, [...payments, final], properties, updatePaymentFirestore); }};
+    const updatePaymentFirestore = (up: Payment) => { if (!isReadOnly) db.collection('payments').doc(up.id).set(sanitizeData(up), { merge: true }); };
+    const addPayment = async (p: Omit<Payment, 'id'| 'userId'>) => { if(!isReadOnly) { const ref = await db.collection('payments').add(sanitizeData({ ...p, userId: user.id })); const final = { ...p, id: ref.id, userId: user.id }; recalculateNextMonthBalance(final, [...payments, final], properties, updatePaymentFirestore); }};
     const updatePayment = (up: Payment) => { if(!isReadOnly) { updatePaymentFirestore(up); recalculateNextMonthBalance(up, payments, properties, updatePaymentFirestore); }};
     const deletePayment = async (id: string) => { if(!isReadOnly) { const pDel = payments.find(p => p.id === id); if (pDel) { await db.collection('payments').doc(id).delete(); recalculateNextMonthBalance(pDel, payments.filter(p => p.id !== id), properties, updatePaymentFirestore, true); }}};
     
-    const addRepair = (r: Omit<Repair, 'id'| 'userId'>) => { if (!isReadOnly) { db.collection('repairs').add({ ...r, userId: user.id }); }};
-    const updateRepair = (ur: Repair) => { if (!isReadOnly) { const { id, ...data } = ur; db.collection('repairs').doc(id).set(data, { merge: true }); }};
+    const addRepair = (r: Omit<Repair, 'id'| 'userId'>) => { if (!isReadOnly) { db.collection('repairs').add(sanitizeData({ ...r, userId: user.id })); }};
+    const updateRepair = (ur: Repair) => { if (!isReadOnly) { const { id, ...data } = ur; db.collection('repairs').doc(id).set(sanitizeData(data), { merge: true }); }};
     const deleteRepair = (id: string) => { if (!isReadOnly) db.collection('repairs').doc(id).delete(); };
     
-    const addContractor = (c: Omit<Contractor, 'id'|'userId'>) => { if (!isReadOnly) { const ref = db.collection('contractors').doc(); ref.set({ ...c, userId: user.id }); return { ...c, id: ref.id, userId: user.id }; } return { ...c, id: 'read-only', userId: 'read-only' };};
-    const updateContractor = (uc: Contractor) => { if (!isReadOnly) { const { id, ...data } = uc; db.collection('contractors').doc(id).set(data, { merge: true }); }};
+    const addContractor = (c: Omit<Contractor, 'id'|'userId'>) => { if (!isReadOnly) { const ref = db.collection('contractors').doc(); ref.set(sanitizeData({ ...c, userId: user.id })); return { ...c, id: ref.id, userId: user.id }; } return { ...c, id: 'read-only', userId: 'read-only' };};
+    const updateContractor = (uc: Contractor) => { if (!isReadOnly) { const { id, ...data } = uc; db.collection('contractors').doc(id).set(sanitizeData(data), { merge: true }); }};
     
     // Notification functions work regardless of read-only mode, as they are personal to the user
-    const addNotification = async (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { await db.collection('notifications').add({ ...n, userId: user.id, senderId: user.id, senderName: user.name, senderEmail: user.email, timestamp: new Date().toISOString(), isAcknowledged: false }); };
-    const updateNotification = (id: string, updates: Partial<Notification>) => { db.collection('notifications').doc(id).update(updates); };
+    const addNotification = async (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { await db.collection('notifications').add(sanitizeData({ ...n, userId: user.id, senderId: user.id, senderName: user.name, senderEmail: user.email, timestamp: new Date().toISOString(), isAcknowledged: false })); };
+    const updateNotification = (id: string, updates: Partial<Notification>) => { db.collection('notifications').doc(id).update(sanitizeData(updates)); };
     const deleteNotification = (id: string) => { db.collection('notifications').doc(id).delete(); };
 
     const isUserPropertyOwner = async (email: string): Promise<boolean> => {
