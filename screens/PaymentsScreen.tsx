@@ -173,7 +173,7 @@ interface PaymentsScreenProps {
 
 const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onActionDone }) => {
     const { properties, payments, getPaymentsForProperty, addPayment, updatePayment, deletePayment } = useAppContext();
-    const { isReadOnly } = useAuth();
+    const { isReadOnly, user } = useAuth();
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>(undefined);
@@ -290,6 +290,8 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
             payment.utilities.forEach(u => {
                 utilsLine += `- ${u.category}: Due ${formatMoney(u.billAmount)} | Paid ${formatMoney(u.paidAmount)}\n`;
             });
+        } else {
+            utilsLine += 'No utilities tracked.\n';
         }
 
         const totalPaidMonth = payment.rentPaidAmount + utilsPaid;
@@ -314,7 +316,10 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
             body += `\nNotes: ${payment.notes}\n`;
         }
 
-        body += `\nThank you,\nProperty Management`;
+        body += `\nThank you,\nProperty Management\n`;
+        if (user) {
+            body += `${user.name} (${user.email})`;
+        }
 
         window.open(`mailto:${tenantEmails}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
     };
