@@ -279,30 +279,36 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
         
         const formatMoney = (amount: number) => `$${amount.toFixed(2)}`;
 
+        // Current Month Calculations
         let rentLine = `Rent Due: ${formatMoney(payment.rentBillAmount)}    Rent Paid: ${formatMoney(payment.rentPaidAmount)}`;
         
-        // Detailed utility breakdown
-        let utilsText = 'Utilities:\n';
+        let utilsDue = payment.utilities.reduce((sum, u) => sum + u.billAmount, 0);
+        let utilsPaid = payment.utilities.reduce((sum, u) => sum + u.paidAmount, 0);
+        let utilsLine = '';
         if (payment.utilities.length > 0) {
+            utilsLine = 'Utilities:\n';
             payment.utilities.forEach(u => {
-                utilsText += `- ${u.category}: Due ${formatMoney(u.billAmount)} | Paid ${formatMoney(u.paidAmount)}\n`;
+                utilsLine += `- ${u.category}: Due ${formatMoney(u.billAmount)} | Paid ${formatMoney(u.paidAmount)}\n`;
             });
-        } else {
-            utilsText += 'No utilities tracked.\n';
         }
 
-        let utilsPaid = payment.utilities.reduce((sum, u) => sum + u.paidAmount, 0);
-        let utilsDue = payment.utilities.reduce((sum, u) => sum + u.billAmount, 0);
+        const totalPaidMonth = payment.rentPaidAmount + utilsPaid;
+        const totalBillMonth = payment.rentBillAmount + utilsDue;
+        const balanceMonth = totalBillMonth - totalPaidMonth;
 
-        const totalPaid = payment.rentPaidAmount + utilsPaid;
-        const totalBill = payment.rentBillAmount + utilsDue;
-        const balance = totalBill - totalPaid;
+        // Lease Balance Calculation (Total Outstanding)
+        const totalLeaseOutstanding = propertyPayments.reduce((acc, p) => {
+            const rBal = Math.max(0, p.rentBillAmount - p.rentPaidAmount);
+            const uBal = p.utilities.reduce((sum, u) => sum + Math.max(0, u.billAmount - u.paidAmount), 0);
+            return acc + rBal + uBal;
+        }, 0);
 
         let body = `Dear Tenant(s),\n\nHere is the current status for your payment for ${MONTHS[payment.month - 1]} ${payment.year}.\n\n`;
         body += `${rentLine}\n\n`;
-        body += `${utilsText}\n`;
-        body += `Total Paid: ${formatMoney(totalPaid)}\n`;
-        body += `Remaining Balance for the month: ${formatMoney(balance)}\n`;
+        body += `${utilsLine}\n`;
+        body += `Total Paid: ${formatMoney(totalPaidMonth)}\n`;
+        body += `Remaining Balance for the month: ${formatMoney(balanceMonth)}\n`;
+        body += `Remaining Balance for the Lease: ${formatMoney(totalLeaseOutstanding)}\n`;
 
         if (payment.notes) {
             body += `\nNotes: ${payment.notes}\n`;
