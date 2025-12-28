@@ -70,13 +70,17 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const sanitizeData = (data: any): any => {
+  if (data === null || data === undefined) return null;
   if (Array.isArray(data)) {
-    return data.map(sanitizeData);
-  } else if (data !== null && typeof data === 'object') {
-    return Object.entries(data).reduce((acc, [key, value]) => {
-      if (value !== undefined) acc[key] = sanitizeData(value);
-      return acc;
-    }, {} as any);
+    return data.map(sanitizeData).filter(v => v !== undefined);
+  } else if (typeof data === 'object') {
+    const sanitized: any = {};
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined) {
+        sanitized[key] = sanitizeData(value);
+      }
+    });
+    return sanitized;
   }
   return data;
 };
@@ -161,35 +165,48 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     }, [initialLoadStatus]);
 
     useEffect(() => {
-        if (!db || !user) return;
+        if (!db || !user) {
+          setIsLoading(false);
+          return;
+        }
+        
         setInitialLoadStatus({ props: false, payments: false, repairs: false, contractors: false });
         setIsLoading(true);
 
         const unsubs: (() => void)[] = [];
+        const handleSnapError = (collection: string, error: any) => {
+          console.warn(`Firestore listener error for ${collection}:`, error);
+          setInitialLoadStatus(v => ({...v, [collection === 'properties' ? 'props' : collection]: true}));
+        };
         
         const fetchData = async () => {
             setProperties([]); setPayments([]); setRepairs([]); setContractors([]); setNotifications([]);
             
-            unsubs.push(db.collection('notifications').where('recipientEmail', '==', user.email).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.recipientEmail !== user.email), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))])));
-            unsubs.push(db.collection('notifications').where('senderId', '==', user.id).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.senderId !== user.id), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))])));
+            unsubs.push(db.collection('notifications').where('recipientEmail', '==', user.email).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.recipientEmail !== user.email), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))]), (e: any) => handleSnapError('notifications', e)));
+            unsubs.push(db.collection('notifications').where('senderId', '==', user.id).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.senderId !== user.id), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))]), (e: any) => handleSnapError('notifications', e)));
 
             if (isReadOnly) {
-                const sharesSnap = await db.collection('shares').where('ownerId', '==', activeDbOwner.id).where('viewerId', '==', user.id).get();
-                const sharedPropertyIds = sharesSnap.docs.map((doc: any) => doc.data().propertyId);
-                
-                if (sharedPropertyIds.length > 0) {
-                     unsubs.push(db.collection('properties').where(firebase.firestore.FieldPath.documentId(), 'in', sharedPropertyIds).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, props: true})); }));
-                     unsubs.push(db.collection('payments').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, payments: true})); }));
-                     unsubs.push(db.collection('repairs').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, repairs: true})); }));
-                     unsubs.push(db.collection('contractors').where('userId', '==', activeDbOwner.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, contractors: true})); }));
-                } else {
-                    setInitialLoadStatus({ props: true, payments: true, repairs: true, contractors: true });
+                try {
+                  const sharesSnap = await db.collection('shares').where('ownerId', '==', activeDbOwner.id).where('viewerId', '==', user.id).get();
+                  const sharedPropertyIds = sharesSnap.docs.map((doc: any) => doc.data().propertyId);
+                  
+                  if (sharedPropertyIds.length > 0) {
+                      unsubs.push(db.collection('properties').where(firebase.firestore.FieldPath.documentId(), 'in', sharedPropertyIds).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, props: true})); }, (e: any) => handleSnapError('properties', e)));
+                      unsubs.push(db.collection('payments').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, payments: true})); }, (e: any) => handleSnapError('payments', e)));
+                      unsubs.push(db.collection('repairs').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, repairs: true})); }, (e: any) => handleSnapError('repairs', e)));
+                      unsubs.push(db.collection('contractors').where('userId', '==', activeDbOwner.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, contractors: true})); }, (e: any) => handleSnapError('contractors', e)));
+                  } else {
+                      setInitialLoadStatus({ props: true, payments: true, repairs: true, contractors: true });
+                  }
+                } catch (e) {
+                  console.error("Shared data access error:", e);
+                  setInitialLoadStatus({ props: true, payments: true, repairs: true, contractors: true });
                 }
             } else {
-                unsubs.push(db.collection('properties').where('userId', '==', user.id).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, props: true})); }));
-                unsubs.push(db.collection('payments').where('userId', '==', user.id).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, payments: true})); }));
-                unsubs.push(db.collection('repairs').where('userId', '==', user.id).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, repairs: true})); }));
-                unsubs.push(db.collection('contractors').where('userId', '==', user.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, contractors: true})); }));
+                unsubs.push(db.collection('properties').where('userId', '==', user.id).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, props: true})); }, (e: any) => handleSnapError('properties', e)));
+                unsubs.push(db.collection('payments').where('userId', '==', user.id).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, payments: true})); }, (e: any) => handleSnapError('payments', e)));
+                unsubs.push(db.collection('repairs').where('userId', '==', user.id).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, repairs: true})); }, (e: any) => handleSnapError('repairs', e)));
+                unsubs.push(db.collection('contractors').where('userId', '==', user.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, contractors: true})); }, (e: any) => handleSnapError('contractors', e)));
             }
         };
         fetchData();
@@ -218,18 +235,21 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
             const propMap: Record<string, string> = {};
             const conMap: Record<string, string> = {};
 
+            // 1. Migrate Contractors
             for (const c of localContractors) {
                 const { id, userId, ...data } = c;
                 const ref = await db.collection('contractors').add(sanitizeData({ ...data, userId: user.id }));
                 conMap[id] = ref.id;
             }
 
+            // 2. Migrate Properties
             for (const p of localProps) {
                 const { id, userId, ...data } = p;
                 const ref = await db.collection('properties').add(sanitizeData({ ...data, userId: user.id }));
                 propMap[id] = ref.id;
             }
 
+            // 3. Migrate Payments
             for (const p of localPayments) {
                 const { id, userId, propertyId, ...data } = p;
                 const cloudPropId = propMap[propertyId];
@@ -238,10 +258,11 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                 }
             }
 
+            // 4. Migrate Repairs
             for (const r of localRepairs) {
                 const { id, userId, propertyId, contractorId, ...data } = r;
                 const cloudPropId = propMap[propertyId];
-                const cloudConId = contractorId ? conMap[contractorId] : null;
+                const cloudConId = contractorId ? (conMap[contractorId] || null) : null;
                 if (cloudPropId) {
                     await db.collection('repairs').add(sanitizeData({ ...data, propertyId: cloudPropId, contractorId: cloudConId, userId: user.id }));
                 }
@@ -249,9 +270,9 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
             
             clearGuestData();
             alert("Success! Your property data has been synced to your Google account.");
-        } catch (e) {
-            console.error("Migration failed:", e);
-            alert("Data migration failed. Please ensure you have a stable connection.");
+        } catch (e: any) {
+            console.error("Migration error:", e);
+            alert(`Migration failed: ${e.message || 'Check your internet connection.'}`);
         } finally {
             setIsMigrating(false);
         }
@@ -282,7 +303,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const addShare = async (s: Omit<Share, 'id'>) => { await db.collection('shares').add(s); };
     const deleteShare = async (id: string) => { await db.collection('shares').doc(id).delete(); };
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly, hasGuestData, clearGuestData, isMigrating]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly, hasGuestData, clearGuestData, isMigrating, isLoading]);
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };
 
@@ -304,7 +325,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (authStatus === 'authenticated' && user && activeDbOwner) return <AuthenticatedDataProvider user={user} isReadOnly={isReadOnly} activeDbOwner={activeDbOwner}>{children}</AuthenticatedDataProvider>;
     if (authStatus === 'guest') return <GuestDataProvider user={user}>{children}</GuestDataProvider>;
     const ld = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], migrateGuestData: async() => {}, hasGuestData: false, clearGuestData: () => {}, isMigrating: false };
-    return <AppProviderLogic data={ld} isLoading={true}>{children}</AppProviderLogic>;
+    return <AppProviderLogic data={ld} isLoading={authStatus === 'loading'}>{children}</AppProviderLogic>;
 };
 
 export const useAppContext = () => {
