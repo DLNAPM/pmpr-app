@@ -122,18 +122,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
     }
     
+    // UI feedback should happen immediately
+    setAuthStatus('loading');
+
     try {
-        setAuthStatus('loading');
-        // Set persistence to LOCAL so the user remains logged in after browser restart
-        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-        
         const provider = new firebase.auth.GoogleAuthProvider();
         provider.setCustomParameters({ prompt: 'select_account' });
         
+        /**
+         * CRITICAL FIX: To prevent 'auth/popup-blocked', we MUST NOT have an 'await' 
+         * between the user's click and the popup trigger. 
+         * Local persistence is the default, so we don't need to await it here.
+         */
         await auth.signInWithPopup(provider);
+        
     } catch (error: any) {
         console.error("Authentication failed:", error);
-        alert(`Authentication failed: ${error.message}`);
+        
+        // Handle specific case for popup closed by user vs blocked
+        if (error.code === 'auth/popup-closed-by-user') {
+            setAuthStatus('idle');
+            return;
+        }
+
+        if (error.code === 'auth/popup-blocked') {
+            alert("The sign-in popup was blocked by your browser. Please allow popups for this site or try again.");
+        } else {
+            alert(`Authentication failed: ${error.message}`);
+        }
+        
         setAuthStatus('idle');
     }
   };
