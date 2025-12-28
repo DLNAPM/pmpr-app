@@ -36,6 +36,7 @@ interface AppContextType {
   contractors: Contractor[];
   notifications: Notification[];
   isLoading: boolean;
+  isMigrating: boolean;
   addProperty: (property: Omit<Property, 'id' | 'userId'>) => void;
   updateProperty: (updatedProperty: Property) => void;
   deleteProperty: (propertyId: string) => void;
@@ -122,7 +123,7 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
     const updateNotification = (id: string, updates: Partial<Notification>) => setNotifications(current => current.map(n => n.id === id ? { ...n, ...updates } : n));
     const deleteNotification = (id: string) => setNotifications(current => current.filter(n => n.id !== id));
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, migrateGuestData: async () => {}, hasGuestData: properties.length > 0, clearGuestData: () => {}, isUserPropertyOwner: async () => true }), [properties, payments, repairs, contractors, notifications]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, migrateGuestData: async () => {}, hasGuestData: properties.length > 0, clearGuestData: () => {}, isMigrating: false, isUserPropertyOwner: async () => true }), [properties, payments, repairs, contractors, notifications]);
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
 
@@ -133,12 +134,12 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const [contractors, setContractors] = useState<Contractor[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isMigrating, setIsMigrating] = useState(false);
     const [hasGuestData, setHasGuestData] = useState(false);
     
     const [initialLoadStatus, setInitialLoadStatus] = useState({ props: false, payments: false, repairs: false, contractors: false });
 
     useEffect(() => {
-        // Multi-key check for guest data to ensure it triggers on all devices
         const checkLocal = () => {
             const keys = Object.values(GUEST_KEYS);
             for (const key of keys) {
@@ -212,7 +213,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
             return;
         }
 
-        setIsLoading(true);
+        setIsMigrating(true);
         try {
             const propMap: Record<string, string> = {};
             const conMap: Record<string, string> = {};
@@ -252,7 +253,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
             console.error("Migration failed:", e);
             alert("Data migration failed. Please ensure you have a stable connection.");
         } finally {
-            setIsLoading(false);
+            setIsMigrating(false);
         }
     };
 
@@ -281,7 +282,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const addShare = async (s: Omit<Share, 'id'>) => { await db.collection('shares').add(s); };
     const deleteShare = async (id: string) => { await db.collection('shares').doc(id).delete(); };
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, migrateGuestData, clearGuestData, hasGuestData, isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly, hasGuestData, clearGuestData]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly, hasGuestData, clearGuestData, isMigrating]);
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };
 
@@ -302,7 +303,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { authStatus, user, isReadOnly, activeDbOwner } = useAuth();
     if (authStatus === 'authenticated' && user && activeDbOwner) return <AuthenticatedDataProvider user={user} isReadOnly={isReadOnly} activeDbOwner={activeDbOwner}>{children}</AuthenticatedDataProvider>;
     if (authStatus === 'guest') return <GuestDataProvider user={user}>{children}</GuestDataProvider>;
-    const ld = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], migrateGuestData: async() => {}, hasGuestData: false, clearGuestData: () => {} };
+    const ld = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], migrateGuestData: async() => {}, hasGuestData: false, clearGuestData: () => {}, isMigrating: false };
     return <AppProviderLogic data={ld} isLoading={true}>{children}</AppProviderLogic>;
 };
 

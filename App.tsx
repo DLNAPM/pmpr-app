@@ -26,7 +26,7 @@ export type EditTarget = { type: 'payment' | 'repair', id: string };
 
 const App: React.FC = () => {
   const { authStatus, user, isReadOnly, logout, activeDbOwner } = useAuth();
-  const { notifications, hasGuestData, migrateGuestData, clearGuestData, isLoading } = useAppContext();
+  const { notifications, hasGuestData, migrateGuestData, clearGuestData, isLoading, isMigrating } = useAppContext();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -158,7 +158,7 @@ const App: React.FC = () => {
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto pb-20 md:pb-0 relative">
-          {isLoading && (
+          {isLoading && !isMigrating && (
               <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-30 flex items-center justify-center">
                   <div className="bg-white p-6 rounded-xl shadow-xl flex flex-col items-center gap-4">
                       <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -229,14 +229,14 @@ const App: React.FC = () => {
                 <div className="flex flex-col gap-2 pt-4">
                     <button 
                       onClick={migrateGuestData}
-                      disabled={isLoading}
+                      disabled={isMigrating}
                       className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:bg-slate-300"
                     >
-                        {isLoading ? 'Syncing...' : 'Sync Data to Cloud Now'}
+                        {isMigrating ? 'Syncing...' : 'Sync Data to Cloud Now'}
                     </button>
                     <button 
                       onClick={clearGuestData}
-                      disabled={isLoading}
+                      disabled={isMigrating}
                       className="w-full py-3 bg-white text-slate-500 border border-slate-200 rounded-xl font-medium hover:bg-slate-50 transition-all disabled:opacity-50"
                     >
                         Ignore and Start Fresh
