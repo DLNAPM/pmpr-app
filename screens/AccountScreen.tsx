@@ -1,7 +1,8 @@
+
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Tab } from '../App';
-import { UserCircleIcon, ShareIcon, QuestionMarkCircleIcon, UsersIcon, DocumentChartBarIcon, BellIcon } from '../components/Icons';
+import { UserCircleIcon, ShareIcon, QuestionMarkCircleIcon, UsersIcon, DocumentChartBarIcon, BellIcon, ArrowUpTrayIcon } from '../components/Icons';
 import Card, { CardContent } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 
@@ -14,7 +15,7 @@ interface AccountScreenProps {
 
 const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, onOpenHelp, onLogout }) => {
   const { user, authStatus, isReadOnly } = useAuth();
-  const { notifications } = useAppContext();
+  const { notifications, migrateGuestData, hasGuestData, isLoading } = useAppContext();
 
   const unacknowledgedCount = React.useMemo(() => {
     if (!user) return 0;
@@ -33,65 +34,96 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
   ];
 
   return (
-    <div>
+    <div className="max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-6">Account</h2>
 
-      <Card>
+      <Card className="mb-6">
         <CardContent>
           <div className="flex items-center gap-4">
             <UserCircleIcon className="w-16 h-16 text-slate-400" />
             <div className="flex-1">
               <p className="text-xl font-semibold">{user?.name || 'Guest User'}</p>
               <p className="text-sm text-slate-500">{user?.email || 'guest@local.com'}</p>
+              {authStatus === 'authenticated' && !isReadOnly && (
+                <span className="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Cloud Synced
+                </span>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="mt-6">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">More Sections</h3>
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <ul className="divide-y divide-gray-200">
-                {menuItems.map(item => (
-                    <li key={item.tab}>
-                        <button onClick={() => onNavigate(item.tab)} className="w-full flex justify-between items-center p-4 text-left hover:bg-slate-50">
-                           <div className="flex items-center gap-4">
-                                <item.icon className="w-6 h-6 text-slate-500" />
-                                <span className="font-medium text-gray-800">{item.label}</span>
-                           </div>
-                           {item.badge > 0 && <span className="bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">{item.badge}</span>}
-                        </button>
-                    </li>
-                ))}
-            </ul>
-        </div>
-      </div>
+      {/* Migration Feature */}
+      {authStatus === 'authenticated' && !isReadOnly && hasGuestData && (
+        <Card className="mb-6 border-blue-200 bg-blue-50">
+          <CardContent>
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="bg-blue-100 p-3 rounded-full">
+                <ArrowUpTrayIcon className="w-8 h-8 text-blue-600" />
+              </div>
+              <div className="flex-1 text-center sm:text-left">
+                <h3 className="font-bold text-blue-900">Sync Local Data to Cloud</h3>
+                <p className="text-sm text-blue-700">We detected property data stored locally in this browser. Would you like to migrate it to your Google Cloud account?</p>
+              </div>
+              <button 
+                onClick={migrateGuestData}
+                disabled={isLoading}
+                className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400"
+              >
+                {isLoading ? 'Syncing...' : 'Sync Now'}
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      <div className="mt-6">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">Actions</h3>
-         <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <ul className="divide-y divide-gray-200">
-                {actionItems.map(item => {
-                    if (item.requiresAuth && authStatus === 'guest') return null;
-                    if (item.requiresOwner && isReadOnly) return null;
-                    return (
-                        <li key={item.label}>
-                            <button onClick={item.action} className="w-full flex items-center gap-4 p-4 text-left hover:bg-slate-50">
-                                <item.icon className="w-6 h-6 text-slate-500" />
-                                <span className="font-medium text-gray-800">{item.label}</span>
-                            </button>
-                        </li>
-                    );
-                })}
-                 {authStatus !== 'guest' && (
-                    <li>
-                        <button onClick={onLogout} className="w-full flex items-center gap-4 p-4 text-left hover:bg-slate-50">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-red-500"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>
-                            <span className="font-medium text-red-600">Logout</span>
-                        </button>
-                    </li>
-                 )}
-            </ul>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">More Sections</h3>
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <ul className="divide-y divide-gray-200">
+                  {menuItems.map(item => (
+                      <li key={item.tab}>
+                          <button onClick={() => onNavigate(item.tab)} className="w-full flex justify-between items-center p-4 text-left hover:bg-slate-50">
+                             <div className="flex items-center gap-4">
+                                  <item.icon className="w-6 h-6 text-slate-500" />
+                                  <span className="font-medium text-gray-800">{item.label}</span>
+                             </div>
+                             {item.badge > 0 && <span className="bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">{item.badge}</span>}
+                          </button>
+                      </li>
+                  ))}
+              </ul>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">Actions</h3>
+           <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <ul className="divide-y divide-gray-200">
+                  {actionItems.map(item => {
+                      if (item.requiresAuth && authStatus === 'guest') return null;
+                      if (item.requiresOwner && isReadOnly) return null;
+                      return (
+                          <li key={item.label}>
+                              <button onClick={item.action} className="w-full flex items-center gap-4 p-4 text-left hover:bg-slate-50">
+                                  <item.icon className="w-6 h-6 text-slate-500" />
+                                  <span className="font-medium text-gray-800">{item.label}</span>
+                              </button>
+                          </li>
+                      );
+                  })}
+                   {authStatus !== 'idle' && (
+                      <li>
+                          <button onClick={onLogout} className="w-full flex items-center gap-4 p-4 text-left hover:bg-slate-50 group">
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-red-500 group-hover:text-red-600"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>
+                              <span className="font-medium text-red-600 group-hover:text-red-700">Logout</span>
+                          </button>
+                      </li>
+                   )}
+              </ul>
+          </div>
         </div>
       </div>
 

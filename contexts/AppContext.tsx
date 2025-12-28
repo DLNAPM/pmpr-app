@@ -8,7 +8,6 @@ import { db } from '../firebaseConfig';
 // Declare the global firebase object
 declare const firebase: any;
 
-// --- Create more robust initial data for the previous month ---
 const now = new Date();
 const prevMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
 const prevMonth = prevMonthDate.getMonth() + 1;
@@ -50,24 +49,22 @@ interface AppContextType {
   searchProperties: (query: string) => Property[];
   getSiteHealthScore: (propertyId: string) => number;
   isUserPropertyOwner: (email: string) => Promise<boolean>;
-  // Share functions
   getSharesByOwner: () => Promise<Share[]>;
   findUserByEmail: (email: string) => Promise<User | null>;
   addShare: (shareData: Omit<Share, 'id'>) => Promise<void>;
   deleteShare: (shareId: string) => Promise<void>;
+  migrateGuestData: () => Promise<void>;
+  hasGuestData: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Helper function to remove undefined values from objects before saving to Firestore
 const sanitizeData = (data: any): any => {
   if (Array.isArray(data)) {
     return data.map(sanitizeData);
   } else if (data !== null && typeof data === 'object') {
     return Object.entries(data).reduce((acc, [key, value]) => {
-      if (value !== undefined) {
-        acc[key] = sanitizeData(value);
-      }
+      if (value !== undefined) acc[key] = sanitizeData(value);
       return acc;
     }, {} as any);
   }
@@ -78,7 +75,7 @@ const recalculateNextMonthBalance = async ( changedPayment: Payment | { property
     const { propertyId, year, month } = changedPayment;
     const property = allProperties.find(p => p.id === propertyId);
     if (!property) return;
-    const paymentsForProperty = allPayments.filter(p => p.propertyId === propertyId).sort((a, b) => a.year - b.year || a.month - a.month);
+    const paymentsForProperty = allPayments.filter(p => p.propertyId === propertyId).sort((a, b) => a.year - b.year || a.month - b.month);
     const currentIndex = paymentsForProperty.findIndex(p => p.year === year && p.month === month);
     const baseIndex = isDeletion ? currentIndex - 1 : currentIndex;
     const balanceSourcePayment = baseIndex >= 0 ? paymentsForProperty[baseIndex] : null;
@@ -94,17 +91,11 @@ const recalculateNextMonthBalance = async ( changedPayment: Payment | { property
 };
 
 const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode }> = ({ user, children }) => {
-    const propertiesInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_properties') === null ? initialGuestData.properties : [], []);
-    const paymentsInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_payments') === null ? initialGuestData.payments : [], []);
-    const repairsInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_repairs') === null ? initialGuestData.repairs : [], []);
-    const contractorsInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_contractors') === null ? initialGuestData.contractors : [], []);
-    const notificationsInitialValue = useMemo(() => localStorage.getItem('pmpr_guest_notifications') === null ? initialGuestData.notifications : [], []);
-
-    const [properties, setProperties] = useLocalStorage<Property[]>('pmpr_guest_properties', propertiesInitialValue);
-    const [payments, setPayments] = useLocalStorage<Payment[]>('pmpr_guest_payments', paymentsInitialValue);
-    const [repairs, setRepairs] = useLocalStorage<Repair[]>('pmpr_guest_repairs', repairsInitialValue);
-    const [contractors, setContractors] = useLocalStorage<Contractor[]>('pmpr_guest_contractors', contractorsInitialValue);
-    const [notifications, setNotifications] = useLocalStorage<Notification[]>('pmpr_guest_notifications', notificationsInitialValue);
+    const [properties, setProperties] = useLocalStorage<Property[]>('pmpr_guest_properties', initialGuestData.properties);
+    const [payments, setPayments] = useLocalStorage<Payment[]>('pmpr_guest_payments', initialGuestData.payments);
+    const [repairs, setRepairs] = useLocalStorage<Repair[]>('pmpr_guest_repairs', initialGuestData.repairs);
+    const [contractors, setContractors] = useLocalStorage<Contractor[]>('pmpr_guest_contractors', initialGuestData.contractors);
+    const [notifications, setNotifications] = useLocalStorage<Notification[]>('pmpr_guest_notifications', initialGuestData.notifications);
     
     const addProperty = (property: Omit<Property, 'id' | 'userId'>) => setProperties(p => [...p, { ...property, id: crypto.randomUUID(), userId: 'guest_user' }]);
     const updateProperty = (updated: Property) => setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
@@ -118,18 +109,11 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
     const addContractor = (contractor: Omit<Contractor, 'id'| 'userId'>) => { const newContractor = { ...contractor, id: crypto.randomUUID(), userId: 'guest_user' }; setContractors(c => [...c, newContractor]); return newContractor; };
     const updateContractor = (updated: Contractor) => setContractors(c => c.map(con => con.id === updated.id ? updated : con));
 
-    const sender = user || { id: 'guest_user', name: 'Guest', email: 'guest@local.com' };
-    const addNotification = async (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { setNotifications(current => [...current, { ...n, id: crypto.randomUUID(), userId: sender.id, senderId: sender.id, senderName: sender.name, senderEmail: sender.email, timestamp: new Date().toISOString(), isAcknowledged: false }]); };
+    const addNotification = async (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { setNotifications(current => [...current, { ...n, id: crypto.randomUUID(), userId: 'guest_user', senderId: 'guest_user', senderName: 'Guest', senderEmail: 'guest@local.com', timestamp: new Date().toISOString(), isAcknowledged: false }]); };
     const updateNotification = (id: string, updates: Partial<Notification>) => setNotifications(current => current.map(n => n.id === id ? { ...n, ...updates } : n));
     const deleteNotification = (id: string) => setNotifications(current => current.filter(n => n.id !== id));
-    const isUserPropertyOwner = async (email: string) => {
-      // In guest mode, only the "guest" user owns properties.
-      // This is a simplified check for the local session.
-      return email === 'guest@local.com' && properties.length > 0;
-    };
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, isUserPropertyOwner }), [properties, payments, repairs, contractors, notifications]);
-
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, migrateGuestData: async () => {}, hasGuestData: properties.length > 0, isUserPropertyOwner: async () => true }), [properties, payments, repairs, contractors, notifications]);
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
 
@@ -140,136 +124,134 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const [contractors, setContractors] = useState<Contractor[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const previousNotificationsRef = useRef<Notification[] | null>(null);
+    
+    // Track when we've received the first snapshot for each core collection
+    const [initialLoadStatus, setInitialLoadStatus] = useState({ props: false, payments: false, repairs: false, contractors: false });
 
-
-    // Effect to check for new notifications and play sound
     useEffect(() => {
-        if (previousNotificationsRef.current === null) { // Don't play on initial load
-            previousNotificationsRef.current = notifications;
-            return;
+        if (initialLoadStatus.props && initialLoadStatus.payments && initialLoadStatus.repairs && initialLoadStatus.contractors) {
+            setIsLoading(false);
         }
-
-        const soundEnabled = localStorage.getItem('pmpr_notification_sound_enabled');
-        if (soundEnabled === 'false') {
-            previousNotificationsRef.current = notifications;
-            return;
-        }
-
-        if (user && previousNotificationsRef.current) {
-            const myEmail = user.email.toLowerCase();
-            const oldReceivedIds = new Set(
-                previousNotificationsRef.current
-                    .filter(n => n.recipientEmail.toLowerCase() === myEmail)
-                    .map(n => n.id)
-            );
-            
-            const newNotificationReceived = notifications.some(
-                n => n.recipientEmail.toLowerCase() === myEmail && !oldReceivedIds.has(n.id)
-            );
-
-            if (newNotificationReceived) {
-                window.dispatchEvent(new CustomEvent('play-notification-sound'));
-            }
-        }
-        
-        previousNotificationsRef.current = notifications;
-    }, [notifications, user]);
+    }, [initialLoadStatus]);
 
     useEffect(() => {
         if (!db || !user) return;
+        setInitialLoadStatus({ props: false, payments: false, repairs: false, contractors: false });
         setIsLoading(true);
 
         const unsubs: (() => void)[] = [];
         
         const fetchData = async () => {
-            // Reset state
             setProperties([]); setPayments([]); setRepairs([]); setContractors([]); setNotifications([]);
-            previousNotificationsRef.current = null; // Reset for sound check
             
-            // Notifications are personal, fetched for the logged-in user, and merged.
-            const receivedQuery = db.collection('notifications').where('recipientEmail', '==', user.email);
-            const sentQuery = db.collection('notifications').where('senderId', '==', user.id);
+            // Personal Notifications
+            unsubs.push(db.collection('notifications').where('recipientEmail', '==', user.email).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.recipientEmail !== user.email), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))])));
+            unsubs.push(db.collection('notifications').where('senderId', '==', user.id).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.senderId !== user.id), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))])));
 
-            const receivedUnsub = receivedQuery.onSnapshot((snapshot: any) => {
-                const receivedItems = snapshot.docs.map((d: any) => ({id: d.id, ...d.data()}));
-                setNotifications(current => {
-                    const otherItems = current.filter(n => n.recipientEmail.toLowerCase() !== user.email.toLowerCase());
-                    return [...otherItems, ...receivedItems];
-                });
-            });
-            const sentUnsub = sentQuery.onSnapshot((snapshot: any) => {
-                const sentItems = snapshot.docs.map((d: any) => ({id: d.id, ...d.data()}));
-                setNotifications(current => {
-                    const otherItems = current.filter(n => n.senderId !== user.id);
-                    return [...otherItems, ...sentItems];
-                });
-            });
-            unsubs.push(receivedUnsub, sentUnsub);
-
-
-            if (isReadOnly) { // Viewing a shared database
+            if (isReadOnly) {
                 const sharesSnap = await db.collection('shares').where('ownerId', '==', activeDbOwner.id).where('viewerId', '==', user.id).get();
                 const sharedPropertyIds = sharesSnap.docs.map((doc: any) => doc.data().propertyId);
+                
                 if (sharedPropertyIds.length > 0) {
-                     unsubs.push(db.collection('properties').where(firebase.firestore.FieldPath.documentId(), 'in', sharedPropertyIds).onSnapshot((s: any) => setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
-                     unsubs.push(db.collection('payments').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
-                     unsubs.push(db.collection('repairs').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
-                     // Contractors are not strictly tied to property IDs but to user IDs. For granular sharing, we fetch all contractors of the owner.
-                     unsubs.push(db.collection('contractors').where('userId', '==', activeDbOwner.id).onSnapshot((s: any) => setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
+                     unsubs.push(db.collection('properties').where(firebase.firestore.FieldPath.documentId(), 'in', sharedPropertyIds).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, props: true})); }));
+                     unsubs.push(db.collection('payments').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, payments: true})); }));
+                     unsubs.push(db.collection('repairs').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, repairs: true})); }));
+                     unsubs.push(db.collection('contractors').where('userId', '==', activeDbOwner.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, contractors: true})); }));
+                } else {
+                    setInitialLoadStatus({ props: true, payments: true, repairs: true, contractors: true });
                 }
-            } else { // Viewing own database
-                unsubs.push(db.collection('properties').where('userId', '==', user.id).onSnapshot((s: any) => setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
-                unsubs.push(db.collection('payments').where('userId', '==', user.id).onSnapshot((s: any) => setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
-                unsubs.push(db.collection('repairs').where('userId', '==', user.id).onSnapshot((s: any) => setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
-                unsubs.push(db.collection('contractors').where('userId', '==', user.id).onSnapshot((s: any) => setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()})))));
+            } else {
+                unsubs.push(db.collection('properties').where('userId', '==', user.id).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, props: true})); }));
+                unsubs.push(db.collection('payments').where('userId', '==', user.id).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, payments: true})); }));
+                unsubs.push(db.collection('repairs').where('userId', '==', user.id).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, repairs: true})); }));
+                unsubs.push(db.collection('contractors').where('userId', '==', user.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, contractors: true})); }));
             }
-             setIsLoading(false);
         };
         fetchData();
         return () => unsubs.forEach(unsub => unsub());
     }, [user, isReadOnly, activeDbOwner]);
-    
-    // All write operations are guarded by the isReadOnly flag.
+
+    const migrateGuestData = async () => {
+        if (!db || isReadOnly || !user) return;
+        const localProps = JSON.parse(localStorage.getItem('pmpr_guest_properties') || '[]');
+        const localPayments = JSON.parse(localStorage.getItem('pmpr_guest_payments') || '[]');
+        const localRepairs = JSON.parse(localStorage.getItem('pmpr_guest_repairs') || '[]');
+        const localContractors = JSON.parse(localStorage.getItem('pmpr_guest_contractors') || '[]');
+
+        if (localProps.length === 0) return;
+
+        setIsLoading(true);
+        try {
+            const propMap: Record<string, string> = {};
+            const conMap: Record<string, string> = {};
+
+            // 1. Migrate Contractors
+            for (const c of localContractors) {
+                const { id, userId, ...data } = c;
+                const ref = await db.collection('contractors').add(sanitizeData({ ...data, userId: user.id }));
+                conMap[id] = ref.id;
+            }
+
+            // 2. Migrate Properties
+            for (const p of localProps) {
+                const { id, userId, ...data } = p;
+                const ref = await db.collection('properties').add(sanitizeData({ ...data, userId: user.id }));
+                propMap[id] = ref.id;
+            }
+
+            // 3. Migrate Payments
+            for (const p of localPayments) {
+                const { id, userId, propertyId, ...data } = p;
+                const cloudPropId = propMap[propertyId];
+                if (cloudPropId) {
+                    await db.collection('payments').add(sanitizeData({ ...data, propertyId: cloudPropId, userId: user.id }));
+                }
+            }
+
+            // 4. Migrate Repairs
+            for (const r of localRepairs) {
+                const { id, userId, propertyId, contractorId, ...data } = r;
+                const cloudPropId = propMap[propertyId];
+                const cloudConId = contractorId ? conMap[contractorId] : null;
+                if (cloudPropId) {
+                    await db.collection('repairs').add(sanitizeData({ ...data, propertyId: cloudPropId, contractorId: cloudConId, userId: user.id }));
+                }
+            }
+            alert("Migration complete! Your local guest data has been synced to the cloud.");
+        } catch (e) {
+            console.error("Migration failed:", e);
+            alert("Data migration failed. Please ensure you have a stable connection and your Security Rules are correct.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const addProperty = (p: Omit<Property, 'id' | 'userId'>) => { if (!isReadOnly) db.collection('properties').add(sanitizeData({ ...p, userId: user.id })); };
     const updateProperty = (up: Property) => { if (!isReadOnly) { const { id, ...data } = up; db.collection('properties').doc(id).set(sanitizeData(data), { merge: true }); }};
-    const deleteProperty = async (id: string) => { if(!isReadOnly) { const batch = db.batch(); const pQuery = await db.collection('payments').where('propertyId', '==', id).get(); pQuery.forEach((doc: any) => batch.delete(doc.ref)); const rQuery = await db.collection('repairs').where('propertyId', '==', id).get(); rQuery.forEach((doc: any) => batch.delete(doc.ref)); const propRef = db.collection('properties').doc(id); batch.delete(propRef); await batch.commit(); }};
+    const deleteProperty = async (id: string) => { if(!isReadOnly) { const batch = db.batch(); const pQuery = await db.collection('payments').where('propertyId', '==', id).get(); pQuery.forEach((doc: any) => batch.delete(doc.ref)); const rQuery = await db.collection('repairs').where('propertyId', '==', id).get(); rQuery.forEach((doc: any) => batch.delete(doc.ref)); batch.delete(db.collection('properties').doc(id)); await batch.commit(); }};
     
     const updatePaymentFirestore = (up: Payment) => { if (!isReadOnly) db.collection('payments').doc(up.id).set(sanitizeData(up), { merge: true }); };
     const addPayment = async (p: Omit<Payment, 'id'| 'userId'>) => { if(!isReadOnly) { const ref = await db.collection('payments').add(sanitizeData({ ...p, userId: user.id })); const final = { ...p, id: ref.id, userId: user.id }; recalculateNextMonthBalance(final, [...payments, final], properties, updatePaymentFirestore); }};
     const updatePayment = (up: Payment) => { if(!isReadOnly) { updatePaymentFirestore(up); recalculateNextMonthBalance(up, payments, properties, updatePaymentFirestore); }};
     const deletePayment = async (id: string) => { if(!isReadOnly) { const pDel = payments.find(p => p.id === id); if (pDel) { await db.collection('payments').doc(id).delete(); recalculateNextMonthBalance(pDel, payments.filter(p => p.id !== id), properties, updatePaymentFirestore, true); }}};
     
-    const addRepair = (r: Omit<Repair, 'id'| 'userId'>) => { if (!isReadOnly) { db.collection('repairs').add(sanitizeData({ ...r, userId: user.id })); }};
-    const updateRepair = (ur: Repair) => { if (!isReadOnly) { const { id, ...data } = ur; db.collection('repairs').doc(id).set(sanitizeData(data), { merge: true }); }};
+    const addRepair = (r: Omit<Repair, 'id'| 'userId'>) => { if (!isReadOnly) db.collection('repairs').add(sanitizeData({ ...r, userId: user.id })); };
+    const updateRepair = (ur: Repair) => { if (!isReadOnly) db.collection('repairs').doc(ur.id).set(sanitizeData(ur), { merge: true }); };
     const deleteRepair = (id: string) => { if (!isReadOnly) db.collection('repairs').doc(id).delete(); };
     
-    const addContractor = (c: Omit<Contractor, 'id'|'userId'>) => { if (!isReadOnly) { const ref = db.collection('contractors').doc(); ref.set(sanitizeData({ ...c, userId: user.id })); return { ...c, id: ref.id, userId: user.id }; } return { ...c, id: 'read-only', userId: 'read-only' };};
-    const updateContractor = (uc: Contractor) => { if (!isReadOnly) { const { id, ...data } = uc; db.collection('contractors').doc(id).set(sanitizeData(data), { merge: true }); }};
+    const addContractor = (c: Omit<Contractor, 'id'|'userId'>) => { if (!isReadOnly) { const ref = db.collection('contractors').doc(); ref.set(sanitizeData({ ...c, userId: user.id })); return { ...c, id: ref.id, userId: user.id }; } return { ...c, id: 'ro', userId: 'ro' };};
+    const updateContractor = (uc: Contractor) => { if (!isReadOnly) db.collection('contractors').doc(uc.id).set(sanitizeData(uc), { merge: true }); };
     
-    // Notification functions work regardless of read-only mode, as they are personal to the user
     const addNotification = async (n: Omit<Notification, 'id'|'userId'|'senderId'|'senderName'|'senderEmail'|'timestamp'|'isAcknowledged'>) => { await db.collection('notifications').add(sanitizeData({ ...n, userId: user.id, senderId: user.id, senderName: user.name, senderEmail: user.email, timestamp: new Date().toISOString(), isAcknowledged: false })); };
     const updateNotification = (id: string, updates: Partial<Notification>) => { db.collection('notifications').doc(id).update(sanitizeData(updates)); };
     const deleteNotification = (id: string) => { db.collection('notifications').doc(id).delete(); };
 
-    const isUserPropertyOwner = async (email: string): Promise<boolean> => {
-        if (!db) return false;
-        const userSnap = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
-        if (userSnap.empty) return false;
-        
-        const targetUserId = userSnap.docs[0].id;
-        const propertiesSnap = await db.collection('properties').where('userId', '==', targetUserId).limit(1).get();
-        return !propertiesSnap.empty;
-    };
+    const getSharesByOwner = async () => { const snap = await db.collection('shares').where('ownerId', '==', user.id).get(); return snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })); };
+    const findUserByEmail = async (email: string) => { const snap = await db.collection('users').where('email', '==', email).limit(1).get(); return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as User; };
+    const addShare = async (s: Omit<Share, 'id'>) => { await db.collection('shares').add(s); };
+    const deleteShare = async (id: string) => { await db.collection('shares').doc(id).delete(); };
 
-
-    // Share functions are only available when NOT in read-only mode
-    const getSharesByOwner = async (): Promise<Share[]> => { if (isReadOnly || !db || !user) return []; const snap = await db.collection('shares').where('ownerId', '==', user.id).get(); return snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })); };
-    const findUserByEmail = async (email: string): Promise<User | null> => { if (isReadOnly || !db) return null; const snap = await db.collection('users').where('email', '==', email).limit(1).get(); if (snap.empty) return null; const doc = snap.docs[0]; return { id: doc.id, ...doc.data() } as User; };
-    const addShare = async (share: Omit<Share, 'id'>) => { if (isReadOnly || !db) return; await db.collection('shares').add(share); };
-    const deleteShare = async (shareId: string) => { if (isReadOnly || !db) return; await db.collection('shares').doc(shareId).delete(); };
-
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, isUserPropertyOwner }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, migrateGuestData, hasGuestData: !!localStorage.getItem('pmpr_guest_properties'), isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly]);
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };
 
@@ -279,8 +261,8 @@ const AppProviderLogic: React.FC<{data: any, isLoading: boolean, children: React
     const getContractorById = (id: string) => contractors.find((c: Contractor) => c.id === id);
     const getPaymentsForProperty = (propertyId: string) => payments.filter((p: Payment) => p.propertyId === propertyId);
     const getRepairsForProperty = (propertyId: string) => repairs.filter((r: Repair) => r.propertyId === propertyId);
-    const searchProperties = (query: string) => { if (!query) return properties; const lq = query.toLowerCase(); return properties.filter((p: Property) => p.name.toLowerCase().includes(lq) || p.address.toLowerCase().includes(lq) || p.tenants.some(t => t.name.toLowerCase().includes(lq))); };
-    const getSiteHealthScore = (propertyId: string) => { const propPayments = getPaymentsForProperty(propertyId); const propRepairs = getRepairsForProperty(propertyId); let score = 100; if (propPayments.length === 0) return 75; const now = new Date(); const currentMonth = now.getMonth() + 1; const currentYear = now.getFullYear(); propPayments.forEach((p: Payment) => { if (p.year < currentYear || (p.year === currentYear && p.month < currentMonth)) { if (p.rentPaidAmount < p.rentBillAmount) score -= 10; score -= p.utilities.filter(u => u.paidAmount < u.billAmount).length * 2; } }); score -= propRepairs.filter((r: Repair) => r.status !== RepairStatus.COMPLETE).length * 5; return Math.max(0, Math.min(100, score)); };
+    const searchProperties = (query: string) => { const lq = query.toLowerCase(); return properties.filter((p: Property) => p.name.toLowerCase().includes(lq) || p.address.toLowerCase().includes(lq)); };
+    const getSiteHealthScore = (id: string) => { const ps = getPaymentsForProperty(id); const rs = getRepairsForProperty(id); let s = 100; if (ps.length === 0) return 75; ps.forEach(p => { if (p.rentPaidAmount < p.rentBillAmount) s -= 10; }); s -= rs.filter(r => r.status !== RepairStatus.COMPLETE).length * 5; return Math.max(0, Math.min(100, s)); };
     
     const value = useMemo(() => ({ ...data, isLoading, getPropertyById, getContractorById, getPaymentsForProperty, getRepairsForProperty, searchProperties, getSiteHealthScore }), [data, isLoading]);
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -288,14 +270,10 @@ const AppProviderLogic: React.FC<{data: any, isLoading: boolean, children: React
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { authStatus, user, isReadOnly, activeDbOwner } = useAuth();
-    if (authStatus === 'authenticated' && user && activeDbOwner) {
-        return <AuthenticatedDataProvider user={user} isReadOnly={isReadOnly} activeDbOwner={activeDbOwner}>{children}</AuthenticatedDataProvider>;
-    }
-    if (authStatus === 'guest') {
-        return <GuestDataProvider user={user}>{children}</GuestDataProvider>;
-    }
-    const loadingData = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], addProperty: () => {}, updateProperty: () => {}, deleteProperty: () => {}, addPayment: () => {}, updatePayment: () => {}, deletePayment: () => {}, addRepair: () => {}, updateRepair: () => {}, deleteRepair: () => {}, addContractor: (c: Omit<Contractor, 'id'|'userId'>) => ({ ...c, id: 'loading-id', userId: 'loading' }), updateContractor: () => {}, addNotification: async () => {}, updateNotification: () => {}, deleteNotification: () => {}, getSharesByOwner: async () => [], findUserByEmail: async () => null, addShare: async () => {}, deleteShare: async () => {}, isUserPropertyOwner: async () => false };
-    return <AppProviderLogic data={loadingData} isLoading={true}>{children}</AppProviderLogic>;
+    if (authStatus === 'authenticated' && user && activeDbOwner) return <AuthenticatedDataProvider user={user} isReadOnly={isReadOnly} activeDbOwner={activeDbOwner}>{children}</AuthenticatedDataProvider>;
+    if (authStatus === 'guest') return <GuestDataProvider user={user}>{children}</GuestDataProvider>;
+    const ld = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], migrateGuestData: async() => {}, hasGuestData: false };
+    return <AppProviderLogic data={ld} isLoading={true}>{children}</AppProviderLogic>;
 };
 
 export const useAppContext = () => {
