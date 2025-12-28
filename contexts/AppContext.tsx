@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification } from '../types';
 import { useAuth, User } from './AuthContext';
@@ -141,28 +141,23 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const [isMigrating, setIsMigrating] = useState(false);
     const [hasGuestData, setHasGuestData] = useState(false);
     
-    const [initialLoadStatus, setInitialLoadStatus] = useState({ props: false, payments: false, repairs: false, contractors: false });
-
-    useEffect(() => {
-        const checkLocal = () => {
-            const keys = Object.values(GUEST_KEYS);
-            for (const key of keys) {
-                const data = localStorage.getItem(key);
-                if (data && data !== '[]') {
-                    setHasGuestData(true);
-                    return;
-                }
+    // Safety check for guest data
+    const checkLocal = useCallback(() => {
+        const keys = Object.values(GUEST_KEYS);
+        for (const key of keys) {
+            const data = localStorage.getItem(key);
+            if (data && data !== '[]') {
+                setHasGuestData(true);
+                return true;
             }
-            setHasGuestData(false);
-        };
-        checkLocal();
+        }
+        setHasGuestData(false);
+        return false;
     }, []);
 
     useEffect(() => {
-        if (initialLoadStatus.props && initialLoadStatus.payments && initialLoadStatus.repairs && initialLoadStatus.contractors) {
-            setIsLoading(false);
-        }
-    }, [initialLoadStatus]);
+        checkLocal();
+    }, [checkLocal]);
 
     useEffect(() => {
         if (!db || !user) {
@@ -170,47 +165,56 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
           return;
         }
         
-        setInitialLoadStatus({ props: false, payments: false, repairs: false, contractors: false });
         setIsLoading(true);
-
         const unsubs: (() => void)[] = [];
-        const handleSnapError = (collection: string, error: any) => {
-          console.warn(`Firestore listener error for ${collection}:`, error);
-          setInitialLoadStatus(v => ({...v, [collection === 'properties' ? 'props' : collection]: true}));
-        };
         
-        const fetchData = async () => {
-            setProperties([]); setPayments([]); setRepairs([]); setContractors([]); setNotifications([]);
-            
-            unsubs.push(db.collection('notifications').where('recipientEmail', '==', user.email).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.recipientEmail !== user.email), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))]), (e: any) => handleSnapError('notifications', e)));
-            unsubs.push(db.collection('notifications').where('senderId', '==', user.id).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.senderId !== user.id), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))]), (e: any) => handleSnapError('notifications', e)));
-
-            if (isReadOnly) {
-                try {
-                  const sharesSnap = await db.collection('shares').where('ownerId', '==', activeDbOwner.id).where('viewerId', '==', user.id).get();
-                  const sharedPropertyIds = sharesSnap.docs.map((doc: any) => doc.data().propertyId);
-                  
-                  if (sharedPropertyIds.length > 0) {
-                      unsubs.push(db.collection('properties').where(firebase.firestore.FieldPath.documentId(), 'in', sharedPropertyIds).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, props: true})); }, (e: any) => handleSnapError('properties', e)));
-                      unsubs.push(db.collection('payments').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, payments: true})); }, (e: any) => handleSnapError('payments', e)));
-                      unsubs.push(db.collection('repairs').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, repairs: true})); }, (e: any) => handleSnapError('repairs', e)));
-                      unsubs.push(db.collection('contractors').where('userId', '==', activeDbOwner.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, contractors: true})); }, (e: any) => handleSnapError('contractors', e)));
-                  } else {
-                      setInitialLoadStatus({ props: true, payments: true, repairs: true, contractors: true });
-                  }
-                } catch (e) {
-                  console.error("Shared data access error:", e);
-                  setInitialLoadStatus({ props: true, payments: true, repairs: true, contractors: true });
-                }
-            } else {
-                unsubs.push(db.collection('properties').where('userId', '==', user.id).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, props: true})); }, (e: any) => handleSnapError('properties', e)));
-                unsubs.push(db.collection('payments').where('userId', '==', user.id).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, payments: true})); }, (e: any) => handleSnapError('payments', e)));
-                unsubs.push(db.collection('repairs').where('userId', '==', user.id).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, repairs: true})); }, (e: any) => handleSnapError('repairs', e)));
-                unsubs.push(db.collection('contractors').where('userId', '==', user.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); setInitialLoadStatus(v => ({...v, contractors: true})); }, (e: any) => handleSnapError('contractors', e)));
+        // Use a counter to track when all main collections have responded (even if empty)
+        let loadedCount = 0;
+        const markLoaded = () => {
+            loadedCount++;
+            if (loadedCount >= 4) {
+                setIsLoading(false);
             }
         };
+
+        // Safety timeout: If collections are slow, don't block the UI infinitely
+        const timeout = setTimeout(() => {
+            setIsLoading(false);
+        }, 5000);
+
+        const fetchData = async () => {
+            const userIdToQuery = isReadOnly ? activeDbOwner.id : user.id;
+
+            // Notifications are separate
+            unsubs.push(db.collection('notifications').where('recipientEmail', '==', user.email).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.recipientEmail !== user.email), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))])));
+            unsubs.push(db.collection('notifications').where('senderId', '==', user.id).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.senderId !== user.id), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))])));
+
+            if (isReadOnly) {
+                const sharesSnap = await db.collection('shares').where('ownerId', '==', activeDbOwner.id).where('viewerId', '==', user.id).get();
+                const sharedPropertyIds = sharesSnap.docs.map((doc: any) => doc.data().propertyId);
+                
+                if (sharedPropertyIds.length > 0) {
+                     unsubs.push(db.collection('properties').where(firebase.firestore.FieldPath.documentId(), 'in', sharedPropertyIds).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                     unsubs.push(db.collection('payments').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                     unsubs.push(db.collection('repairs').where('propertyId', 'in', sharedPropertyIds).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                     unsubs.push(db.collection('contractors').where('userId', '==', activeDbOwner.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                } else {
+                    loadedCount = 4;
+                    setIsLoading(false);
+                }
+            } else {
+                unsubs.push(db.collection('properties').where('userId', '==', user.id).onSnapshot((s: any) => { setProperties(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                unsubs.push(db.collection('payments').where('userId', '==', user.id).onSnapshot((s: any) => { setPayments(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                unsubs.push(db.collection('repairs').where('userId', '==', user.id).onSnapshot((s: any) => { setRepairs(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                unsubs.push(db.collection('contractors').where('userId', '==', user.id).onSnapshot((s: any) => { setContractors(s.docs.map((d: any) => ({id:d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+            }
+        };
+
         fetchData();
-        return () => unsubs.forEach(unsub => unsub());
+        return () => {
+            clearTimeout(timeout);
+            unsubs.forEach(unsub => unsub());
+        };
     }, [user, isReadOnly, activeDbOwner]);
 
     const clearGuestData = useCallback(() => {
@@ -235,44 +239,44 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
             const propMap: Record<string, string> = {};
             const conMap: Record<string, string> = {};
 
-            // 1. Migrate Contractors
+            // Batch-like migration
             for (const c of localContractors) {
                 const { id, userId, ...data } = c;
                 const ref = await db.collection('contractors').add(sanitizeData({ ...data, userId: user.id }));
                 conMap[id] = ref.id;
             }
 
-            // 2. Migrate Properties
             for (const p of localProps) {
                 const { id, userId, ...data } = p;
                 const ref = await db.collection('properties').add(sanitizeData({ ...data, userId: user.id }));
                 propMap[id] = ref.id;
             }
 
-            // 3. Migrate Payments
-            for (const p of localPayments) {
+            // After properties are mapped, migrate related data
+            const paymentPromises = localPayments.map(async (p: any) => {
                 const { id, userId, propertyId, ...data } = p;
                 const cloudPropId = propMap[propertyId];
                 if (cloudPropId) {
-                    await db.collection('payments').add(sanitizeData({ ...data, propertyId: cloudPropId, userId: user.id }));
+                    return db.collection('payments').add(sanitizeData({ ...data, propertyId: cloudPropId, userId: user.id }));
                 }
-            }
+            });
 
-            // 4. Migrate Repairs
-            for (const r of localRepairs) {
+            const repairPromises = localRepairs.map(async (r: any) => {
                 const { id, userId, propertyId, contractorId, ...data } = r;
                 const cloudPropId = propMap[propertyId];
                 const cloudConId = contractorId ? (conMap[contractorId] || null) : null;
                 if (cloudPropId) {
-                    await db.collection('repairs').add(sanitizeData({ ...data, propertyId: cloudPropId, contractorId: cloudConId, userId: user.id }));
+                    return db.collection('repairs').add(sanitizeData({ ...data, propertyId: cloudPropId, contractorId: cloudConId, userId: user.id }));
                 }
-            }
+            });
+
+            await Promise.all([...paymentPromises, ...repairPromises]);
             
             clearGuestData();
             alert("Success! Your property data has been synced to your Google account.");
         } catch (e: any) {
-            console.error("Migration error:", e);
-            alert(`Migration failed: ${e.message || 'Check your internet connection.'}`);
+            console.error("Migration error detail:", e);
+            alert(`Migration failed: ${e.message || 'Unknown error. Please check your internet connection.'}`);
         } finally {
             setIsMigrating(false);
         }
@@ -303,7 +307,8 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const addShare = async (s: Omit<Share, 'id'>) => { await db.collection('shares').add(s); };
     const deleteShare = async (id: string) => { await db.collection('shares').doc(id).delete(); };
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly, hasGuestData, clearGuestData, isMigrating, isLoading]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user?.id, isReadOnly, hasGuestData, isMigrating, isLoading]);
+    
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };
 
