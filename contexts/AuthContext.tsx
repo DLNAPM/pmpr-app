@@ -64,22 +64,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (displayName && email) {
             const currentUser = { id: uid, name: displayName, email };
             if (db) {
-                db.collection('users').doc(uid).set({ name: displayName, email }, { merge: true });
-                
-                // Check for shares
-                const sharesSnap = await db.collection('shares').where('viewerId', '==', uid).get();
-                const shares: Share[] = sharesSnap.docs.map((doc: any) => doc.data());
-                
-                if (shares.length > 0) {
-                    const ownerIds = [...new Set(shares.map(s => s.ownerId))];
-                    const owners = ownerIds.map(id => {
-                        const firstShare = shares.find(s => s.ownerId === id)!;
-                        return { id: firstShare.ownerId, name: firstShare.ownerName, email: firstShare.ownerEmail };
-                    });
-                    setSharedDbOwners(owners);
-                    setUser(currentUser);
-                    setAuthStatus('selecting_db');
-                } else {
+                try {
+                    db.collection('users').doc(uid).set({ name: displayName, email }, { merge: true });
+                    
+                    // Check for shares
+                    const sharesSnap = await db.collection('shares').where('viewerId', '==', uid).get();
+                    const shares: Share[] = sharesSnap.docs.map((doc: any) => doc.data());
+                    
+                    if (shares.length > 0) {
+                        const ownerIds = [...new Set(shares.map(s => s.ownerId))];
+                        const owners = ownerIds.map(id => {
+                            const firstShare = shares.find(s => s.ownerId === id)!;
+                            return { id: firstShare.ownerId, name: firstShare.ownerName, email: firstShare.ownerEmail };
+                        });
+                        setSharedDbOwners(owners);
+                        setUser(currentUser);
+                        setAuthStatus('selecting_db');
+                    } else {
+                        setUser(currentUser);
+                        setActiveDbOwner(currentUser);
+                        setAuthStatus('authenticated');
+                    }
+                } catch (e) {
+                    console.error("Database connection failed during auth check:", e);
                     setUser(currentUser);
                     setActiveDbOwner(currentUser);
                     setAuthStatus('authenticated');
@@ -109,19 +116,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [resetAuthState]);
   
 
-  const signInWithGoogle = () => {
+  const signInWithGoogle = async () => {
     if (!auth) {
-        alert("Google Sign-In is currently unavailable.");
+        alert("Google Sign-In is currently unavailable. Please check your internet connection and ensure Firebase is correctly configured.");
         return;
     }
-    const provider = new firebase.auth.GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    setAuthStatus('loading');
-    auth.signInWithPopup(provider).catch((error: any) => {
+    
+    try {
+        setAuthStatus('loading');
+        // Set persistence to LOCAL so the user remains logged in after browser restart
+        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        
+        await auth.signInWithPopup(provider);
+    } catch (error: any) {
         console.error("Authentication failed:", error);
         alert(`Authentication failed: ${error.message}`);
         setAuthStatus('idle');
-    });
+    }
   };
 
   const continueAsGuest = () => {
