@@ -61,45 +61,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: any | null) => {
       if (firebaseUser) {
         const { uid, displayName, email } = firebaseUser;
-        if (displayName && email) {
-            const currentUser = { id: uid, name: displayName, email };
-            if (db) {
-                try {
-                    db.collection('users').doc(uid).set({ name: displayName, email }, { merge: true });
-                    
-                    // Check for shares
-                    const sharesSnap = await db.collection('shares').where('viewerId', '==', uid).get();
-                    const shares: Share[] = sharesSnap.docs.map((doc: any) => doc.data());
-                    
-                    if (shares.length > 0) {
-                        const ownerIds = [...new Set(shares.map(s => s.ownerId))];
-                        const owners = ownerIds.map(id => {
-                            const firstShare = shares.find(s => s.ownerId === id)!;
-                            return { id: firstShare.ownerId, name: firstShare.ownerName, email: firstShare.ownerEmail };
-                        });
-                        setSharedDbOwners(owners);
-                        setUser(currentUser);
-                        setAuthStatus('selecting_db');
-                    } else {
-                        setUser(currentUser);
-                        setActiveDbOwner(currentUser);
-                        setAuthStatus('authenticated');
-                    }
-                } catch (e) {
-                    console.error("Database connection failed during auth check:", e);
+        
+        // Google auth usually provides email, but displayName might be null if not set by user
+        const safeEmail = email || '';
+        const safeName = displayName || safeEmail.split('@')[0] || 'Google User';
+        
+        const currentUser: User = { 
+            id: uid, 
+            name: safeName, 
+            email: safeEmail 
+        };
+
+        if (db) {
+            try {
+                // Sync user info to Firestore
+                await db.collection('users').doc(uid).set({ 
+                    name: safeName, 
+                    email: safeEmail,
+                    lastLogin: new Date().toISOString()
+                }, { merge: true });
+                
+                // Check for shares
+                const sharesSnap = await db.collection('shares').where('viewerId', '==', uid).get();
+                const shares: Share[] = sharesSnap.docs.map((doc: any) => doc.data());
+                
+                if (shares.length > 0) {
+                    const ownerIds = [...new Set(shares.map(s => s.ownerId))];
+                    const owners = ownerIds.map(id => {
+                        const firstShare = shares.find(s => s.ownerId === id)!;
+                        return { id: firstShare.ownerId, name: firstShare.ownerName, email: firstShare.ownerEmail };
+                    });
+                    setSharedDbOwners(owners);
+                    setUser(currentUser);
+                    setAuthStatus('selecting_db');
+                } else {
                     setUser(currentUser);
                     setActiveDbOwner(currentUser);
                     setAuthStatus('authenticated');
                 }
-            } else { // db not available
-                 setUser(currentUser);
-                 setActiveDbOwner(currentUser);
-                 setAuthStatus('authenticated');
+            } catch (e) {
+                console.error("Database connection failed during auth check:", e);
+                // Fallback: Proceed with authentication even if firestore check fails
+                setUser(currentUser);
+                setActiveDbOwner(currentUser);
+                setAuthStatus('authenticated');
             }
         } else {
-            console.error("Firebase user is missing display name or email.");
-            resetAuthState();
-            setAuthStatus('idle');
+             // Fallback: No DB service available, use auth info only
+             setUser(currentUser);
+             setActiveDbOwner(currentUser);
+             setAuthStatus('authenticated');
         }
       } else {
         resetAuthState();
@@ -122,24 +133,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
     }
     
-    // UI feedback should happen immediately
     setAuthStatus('loading');
 
     try {
         const provider = new firebase.auth.GoogleAuthProvider();
         provider.setCustomParameters({ prompt: 'select_account' });
         
-        /**
-         * CRITICAL FIX: To prevent 'auth/popup-blocked', we MUST NOT have an 'await' 
-         * between the user's click and the popup trigger. 
-         * Local persistence is the default, so we don't need to await it here.
-         */
+        // Note: No await on setPersistence before the popup to prevent blocking the user gesture
         await auth.signInWithPopup(provider);
         
     } catch (error: any) {
         console.error("Authentication failed:", error);
         
-        // Handle specific case for popup closed by user vs blocked
         if (error.code === 'auth/popup-closed-by-user') {
             setAuthStatus('idle');
             return;
