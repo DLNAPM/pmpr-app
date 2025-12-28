@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useMemo, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification } from '../types';
 import { useAuth, User } from './AuthContext';
@@ -12,6 +12,14 @@ const now = new Date();
 const prevMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
 const prevMonth = prevMonthDate.getMonth() + 1;
 const prevMonthYear = prevMonthDate.getFullYear();
+
+const GUEST_KEYS = {
+    props: 'pmpr_guest_properties',
+    payments: 'pmpr_guest_payments',
+    repairs: 'pmpr_guest_repairs',
+    contractors: 'pmpr_guest_contractors',
+    notifications: 'pmpr_guest_notifications'
+};
 
 const initialGuestData = {
     properties: [ { id: 'prop1', name: 'Sunset Apartments, Unit 101', address: '123 Ocean View Dr, Miami, FL', tenants: [{id: 't1', name: 'John Doe', phone: '555-1234', email: 'john.doe@email.com'}], leaseStart: '2023-08-01T00:00:00.000Z', leaseEnd: '2024-07-31T00:00:00.000Z', securityDeposit: 1500, rentAmount: 1500, utilitiesToTrack: ['Water', 'Electricity', 'Internet'], userId: 'guest_user' }, ],
@@ -55,6 +63,7 @@ interface AppContextType {
   deleteShare: (shareId: string) => Promise<void>;
   migrateGuestData: () => Promise<void>;
   hasGuestData: boolean;
+  clearGuestData: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -91,11 +100,11 @@ const recalculateNextMonthBalance = async ( changedPayment: Payment | { property
 };
 
 const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode }> = ({ user, children }) => {
-    const [properties, setProperties] = useLocalStorage<Property[]>('pmpr_guest_properties', initialGuestData.properties);
-    const [payments, setPayments] = useLocalStorage<Payment[]>('pmpr_guest_payments', initialGuestData.payments);
-    const [repairs, setRepairs] = useLocalStorage<Repair[]>('pmpr_guest_repairs', initialGuestData.repairs);
-    const [contractors, setContractors] = useLocalStorage<Contractor[]>('pmpr_guest_contractors', initialGuestData.contractors);
-    const [notifications, setNotifications] = useLocalStorage<Notification[]>('pmpr_guest_notifications', initialGuestData.notifications);
+    const [properties, setProperties] = useLocalStorage<Property[]>(GUEST_KEYS.props, initialGuestData.properties);
+    const [payments, setPayments] = useLocalStorage<Payment[]>(GUEST_KEYS.payments, initialGuestData.payments);
+    const [repairs, setRepairs] = useLocalStorage<Repair[]>(GUEST_KEYS.repairs, initialGuestData.repairs);
+    const [contractors, setContractors] = useLocalStorage<Contractor[]>(GUEST_KEYS.contractors, initialGuestData.contractors);
+    const [notifications, setNotifications] = useLocalStorage<Notification[]>(GUEST_KEYS.notifications, initialGuestData.notifications);
     
     const addProperty = (property: Omit<Property, 'id' | 'userId'>) => setProperties(p => [...p, { ...property, id: crypto.randomUUID(), userId: 'guest_user' }]);
     const updateProperty = (updated: Property) => setProperties(p => p.map(prop => prop.id === updated.id ? updated : prop));
@@ -113,7 +122,7 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
     const updateNotification = (id: string, updates: Partial<Notification>) => setNotifications(current => current.map(n => n.id === id ? { ...n, ...updates } : n));
     const deleteNotification = (id: string) => setNotifications(current => current.filter(n => n.id !== id));
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, migrateGuestData: async () => {}, hasGuestData: properties.length > 0, isUserPropertyOwner: async () => true }), [properties, payments, repairs, contractors, notifications]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, migrateGuestData: async () => {}, hasGuestData: properties.length > 0, clearGuestData: () => {}, isUserPropertyOwner: async () => true }), [properties, payments, repairs, contractors, notifications]);
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
 
@@ -124,9 +133,25 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const [contractors, setContractors] = useState<Contractor[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [hasGuestData, setHasGuestData] = useState(false);
     
-    // Track when we've received the first snapshot for each core collection
     const [initialLoadStatus, setInitialLoadStatus] = useState({ props: false, payments: false, repairs: false, contractors: false });
+
+    useEffect(() => {
+        // Multi-key check for guest data to ensure it triggers on all devices
+        const checkLocal = () => {
+            const keys = Object.values(GUEST_KEYS);
+            for (const key of keys) {
+                const data = localStorage.getItem(key);
+                if (data && data !== '[]') {
+                    setHasGuestData(true);
+                    return;
+                }
+            }
+            setHasGuestData(false);
+        };
+        checkLocal();
+    }, []);
 
     useEffect(() => {
         if (initialLoadStatus.props && initialLoadStatus.payments && initialLoadStatus.repairs && initialLoadStatus.contractors) {
@@ -144,7 +169,6 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
         const fetchData = async () => {
             setProperties([]); setPayments([]); setRepairs([]); setContractors([]); setNotifications([]);
             
-            // Personal Notifications
             unsubs.push(db.collection('notifications').where('recipientEmail', '==', user.email).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.recipientEmail !== user.email), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))])));
             unsubs.push(db.collection('notifications').where('senderId', '==', user.id).onSnapshot((s: any) => setNotifications(current => [...current.filter(n => n.senderId !== user.id), ...s.docs.map((d: any) => ({id:d.id, ...d.data()}))])));
 
@@ -171,35 +195,40 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
         return () => unsubs.forEach(unsub => unsub());
     }, [user, isReadOnly, activeDbOwner]);
 
+    const clearGuestData = useCallback(() => {
+        Object.values(GUEST_KEYS).forEach(key => localStorage.removeItem(key));
+        setHasGuestData(false);
+    }, []);
+
     const migrateGuestData = async () => {
         if (!db || isReadOnly || !user) return;
-        const localProps = JSON.parse(localStorage.getItem('pmpr_guest_properties') || '[]');
-        const localPayments = JSON.parse(localStorage.getItem('pmpr_guest_payments') || '[]');
-        const localRepairs = JSON.parse(localStorage.getItem('pmpr_guest_repairs') || '[]');
-        const localContractors = JSON.parse(localStorage.getItem('pmpr_guest_contractors') || '[]');
+        const localProps = JSON.parse(localStorage.getItem(GUEST_KEYS.props) || '[]');
+        const localPayments = JSON.parse(localStorage.getItem(GUEST_KEYS.payments) || '[]');
+        const localRepairs = JSON.parse(localStorage.getItem(GUEST_KEYS.repairs) || '[]');
+        const localContractors = JSON.parse(localStorage.getItem(GUEST_KEYS.contractors) || '[]');
 
-        if (localProps.length === 0) return;
+        if (localProps.length === 0 && localContractors.length === 0) {
+            clearGuestData();
+            return;
+        }
 
         setIsLoading(true);
         try {
             const propMap: Record<string, string> = {};
             const conMap: Record<string, string> = {};
 
-            // 1. Migrate Contractors
             for (const c of localContractors) {
                 const { id, userId, ...data } = c;
                 const ref = await db.collection('contractors').add(sanitizeData({ ...data, userId: user.id }));
                 conMap[id] = ref.id;
             }
 
-            // 2. Migrate Properties
             for (const p of localProps) {
                 const { id, userId, ...data } = p;
                 const ref = await db.collection('properties').add(sanitizeData({ ...data, userId: user.id }));
                 propMap[id] = ref.id;
             }
 
-            // 3. Migrate Payments
             for (const p of localPayments) {
                 const { id, userId, propertyId, ...data } = p;
                 const cloudPropId = propMap[propertyId];
@@ -208,7 +237,6 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                 }
             }
 
-            // 4. Migrate Repairs
             for (const r of localRepairs) {
                 const { id, userId, propertyId, contractorId, ...data } = r;
                 const cloudPropId = propMap[propertyId];
@@ -217,10 +245,12 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                     await db.collection('repairs').add(sanitizeData({ ...data, propertyId: cloudPropId, contractorId: cloudConId, userId: user.id }));
                 }
             }
-            alert("Migration complete! Your local guest data has been synced to the cloud.");
+            
+            clearGuestData();
+            alert("Success! Your property data has been synced to your Google account.");
         } catch (e) {
             console.error("Migration failed:", e);
-            alert("Data migration failed. Please ensure you have a stable connection and your Security Rules are correct.");
+            alert("Data migration failed. Please ensure you have a stable connection.");
         } finally {
             setIsLoading(false);
         }
@@ -251,7 +281,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const addShare = async (s: Omit<Share, 'id'>) => { await db.collection('shares').add(s); };
     const deleteShare = async (id: string) => { await db.collection('shares').doc(id).delete(); };
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, migrateGuestData, hasGuestData: !!localStorage.getItem('pmpr_guest_properties'), isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly]);
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner, findUserByEmail, addShare, deleteShare, migrateGuestData, clearGuestData, hasGuestData, isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user.id, isReadOnly, hasGuestData, clearGuestData]);
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };
 
@@ -272,7 +302,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { authStatus, user, isReadOnly, activeDbOwner } = useAuth();
     if (authStatus === 'authenticated' && user && activeDbOwner) return <AuthenticatedDataProvider user={user} isReadOnly={isReadOnly} activeDbOwner={activeDbOwner}>{children}</AuthenticatedDataProvider>;
     if (authStatus === 'guest') return <GuestDataProvider user={user}>{children}</GuestDataProvider>;
-    const ld = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], migrateGuestData: async() => {}, hasGuestData: false };
+    const ld = { properties: [], payments: [], repairs: [], contractors: [], notifications: [], migrateGuestData: async() => {}, hasGuestData: false, clearGuestData: () => {} };
     return <AppProviderLogic data={ld} isLoading={true}>{children}</AppProviderLogic>;
 };
 

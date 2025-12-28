@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import DashboardScreen from './screens/DashboardScreen';
 import PropertiesScreen from './screens/PropertiesScreen';
@@ -7,13 +8,14 @@ import ReportingScreen from './screens/ReportingScreen';
 import ContractorsScreen from './screens/ContractorsScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import AccountScreen from './screens/AccountScreen';
-import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon, BellIcon } from './components/Icons';
+import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon, BellIcon, ArrowUpTrayIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import HelpModal from './components/HelpModal';
 import ShareDataModal from './screens/ShareDataModal';
 import DatabaseSelectionScreen from './screens/DatabaseSelectionScreen';
 import { useAppContext } from './contexts/AppContext';
+import Modal from './components/Modal';
 
 export type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications' | 'account';
 export type ReportFilter = { 
@@ -24,7 +26,7 @@ export type EditTarget = { type: 'payment' | 'repair', id: string };
 
 const App: React.FC = () => {
   const { authStatus, user, isReadOnly, logout, activeDbOwner } = useAuth();
-  const { notifications } = useAppContext();
+  const { notifications, hasGuestData, migrateGuestData, clearGuestData, isLoading } = useAppContext();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -155,7 +157,15 @@ const App: React.FC = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
+        <main className="flex-1 overflow-y-auto pb-20 md:pb-0 relative">
+          {isLoading && (
+              <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-30 flex items-center justify-center">
+                  <div className="bg-white p-6 rounded-xl shadow-xl flex flex-col items-center gap-4">
+                      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="font-semibold text-slate-700 tracking-tight">Connecting to cloud database...</p>
+                  </div>
+              </div>
+          )}
           <div className="p-6">
             {isReadOnly && activeDbOwner && (
                 <div className="bg-yellow-400 text-yellow-900 text-center text-sm font-semibold p-2 rounded-lg mb-6">
@@ -201,6 +211,44 @@ const App: React.FC = () => {
     {/* Modals and Audio */}
     {isHelpModalOpen && <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />}
     {isShareModalOpen && <ShareDataModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />}
+    
+    {/* Automatic Migration Modal for Cloud Users with Local Data */}
+    {authStatus === 'authenticated' && !isReadOnly && hasGuestData && (
+        <Modal 
+          isOpen={true} 
+          onClose={() => {}} // Non-closable to force decision
+          title="Data Found in Browser"
+        >
+            <div className="space-y-4">
+                <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                    <ArrowUpTrayIcon className="w-10 h-10 text-blue-600" />
+                    <p className="text-sm text-blue-900 leading-relaxed font-medium">
+                        We found property data stored locally in this browser. Would you like to sync it to your Google Cloud account so you can access it from any device?
+                    </p>
+                </div>
+                <div className="flex flex-col gap-2 pt-4">
+                    <button 
+                      onClick={migrateGuestData}
+                      disabled={isLoading}
+                      className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:bg-slate-300"
+                    >
+                        {isLoading ? 'Syncing...' : 'Sync Data to Cloud Now'}
+                    </button>
+                    <button 
+                      onClick={clearGuestData}
+                      disabled={isLoading}
+                      className="w-full py-3 bg-white text-slate-500 border border-slate-200 rounded-xl font-medium hover:bg-slate-50 transition-all disabled:opacity-50"
+                    >
+                        Ignore and Start Fresh
+                    </button>
+                </div>
+                <p className="text-center text-[10px] text-slate-400 uppercase tracking-widest pt-2">
+                    Applies to all devices logged into {user?.email}
+                </p>
+            </div>
+        </Modal>
+    )}
+
     <audio ref={audioRef} src="data:audio/mpeg;base64,SUQzBAAAAAAAI..."></audio>
     </>
   );
