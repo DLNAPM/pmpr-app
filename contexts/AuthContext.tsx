@@ -62,7 +62,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (firebaseUser) {
         const { uid, displayName, email } = firebaseUser;
         
-        // Google auth usually provides email, but displayName might be null if not set by user
         const safeEmail = email || '';
         const safeName = displayName || safeEmail.split('@')[0] || 'Google User';
         
@@ -72,9 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: safeEmail 
         };
 
+        // CRITICAL FIX: Set user immediately so UI components have the profile info
+        setUser(currentUser);
+
         if (db) {
             try {
-                // Sync user info to Firestore
+                // Sync user info to Firestore - if this fails due to rules, the catch block handles it
                 await db.collection('users').doc(uid).set({ 
                     name: safeName, 
                     email: safeEmail,
@@ -92,23 +94,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         return { id: firstShare.ownerId, name: firstShare.ownerName, email: firstShare.ownerEmail };
                     });
                     setSharedDbOwners(owners);
-                    setUser(currentUser);
                     setAuthStatus('selecting_db');
                 } else {
-                    setUser(currentUser);
                     setActiveDbOwner(currentUser);
                     setAuthStatus('authenticated');
                 }
             } catch (e) {
-                console.error("Database connection failed during auth check:", e);
-                // Fallback: Proceed with authentication even if firestore check fails
-                setUser(currentUser);
+                console.warn("Firestore access denied. Check your Security Rules in Firebase Console.", e);
+                // Fallback: Proceed with authentication using auth info only
                 setActiveDbOwner(currentUser);
                 setAuthStatus('authenticated');
             }
         } else {
              // Fallback: No DB service available, use auth info only
-             setUser(currentUser);
              setActiveDbOwner(currentUser);
              setAuthStatus('authenticated');
         }
@@ -139,7 +137,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const provider = new firebase.auth.GoogleAuthProvider();
         provider.setCustomParameters({ prompt: 'select_account' });
         
-        // Note: No await on setPersistence before the popup to prevent blocking the user gesture
         await auth.signInWithPopup(provider);
         
     } catch (error: any) {
