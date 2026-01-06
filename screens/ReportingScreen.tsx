@@ -186,6 +186,20 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         });
         doc.text(`Phone: ${user?.companyPhone || '[Phone Not Provided]'}`, infoX, startY + 6 + (companyLines.length * 5));
 
+        // CALC STATEMENT DATE: Last Wednesday of the previous month
+        let prevMonth = filters.reportMonth - 1;
+        let prevYear = filters.reportYear;
+        if (prevMonth === 0) {
+            prevMonth = 12;
+            prevYear -= 1;
+        }
+        // Month param in Date(year, month, 0) is 1-indexed for the '0' shortcut to work as expected here
+        const statementDateObj = new Date(prevYear, prevMonth, 0);
+        while (statementDateObj.getDay() !== 3) {
+            statementDateObj.setDate(statementDateObj.getDate() - 1);
+        }
+        const statementDateStr = statementDateObj.toLocaleDateString();
+
         // Statement Info Box
         doc.setDrawColor(200);
         doc.rect(140, 35, 55, 14); 
@@ -196,7 +210,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.text('Statement Date', 142, 40);
         doc.text('Customer ID', 142, 47);
         doc.setFont('helvetica', 'normal');
-        doc.text(new Date().toLocaleDateString(), 170, 40);
+        doc.text(statementDateStr, 170, 40);
         doc.text(selectedProperty.id.substring(0, 6).toUpperCase(), 170, 47);
 
         // 2. BILL TO & PROPERTY DETAILS
@@ -293,7 +307,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.setFont('helvetica', 'bold');
         doc.text('TOTAL DUE', 135, finalY);
         
-        // FIX: Corrected filled rectangle for "TOTAL DUE" to avoid black background
+        // Ensure "TOTAL DUE" is readable by correctly setting fill color before rectangle
         doc.setFillColor(235, 240, 250);
         doc.rect(160, finalY - 6, 35, 9, 'F');
         
@@ -326,7 +340,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         companyLines.forEach((line, i) => doc.text(line, 20, slipY + 27 + (i * 5)));
 
         doc.text('Statement Date:', 120, slipY + 15);
-        doc.text(new Date().toLocaleDateString(), 170, slipY + 15);
+        doc.text(statementDateStr, 170, slipY + 15);
         doc.text('Property ID:', 120, slipY + 21);
         doc.text(selectedProperty.id.substring(0, 6).toUpperCase(), 170, slipY + 21);
 
