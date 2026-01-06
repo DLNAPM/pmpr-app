@@ -8,7 +8,7 @@ import ReportingScreen from './screens/ReportingScreen';
 import ContractorsScreen from './screens/ContractorsScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import AccountScreen from './screens/AccountScreen';
-import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon, BellIcon, ArrowUpTrayIcon } from './components/Icons';
+import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon, BellIcon, ArrowUpTrayIcon, ChevronDownIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import HelpModal from './components/HelpModal';
@@ -26,7 +26,7 @@ export type EditTarget = { type: 'payment' | 'repair', id: string };
 
 const App: React.FC = () => {
   const { authStatus, user, isReadOnly, logout, activeDbOwner } = useAuth();
-  const { notifications, hasGuestData, migrateGuestData, clearGuestData, isLoading, isMigrating } = useAppContext();
+  const { properties, notifications, hasGuestData, migrateGuestData, clearGuestData, isLoading, isMigrating } = useAppContext();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -39,6 +39,12 @@ const App: React.FC = () => {
     if (!user) return 0;
     return notifications.filter(n => n.recipientEmail.toLowerCase() === user.email.toLowerCase() && !n.isAcknowledged).length;
   }, [notifications, user]);
+
+  const isOwner = useMemo(() => {
+    if (!user) return false;
+    // User is owner if they have properties that are not shared (or if they have any properties in their own DB)
+    return properties.some(p => !p.ownerInfo);
+  }, [properties, user]);
 
   const handleAction = (tab: Tab, action?: string) => {
     setAction(action || null);
@@ -64,7 +70,6 @@ const App: React.FC = () => {
     setReportFilter(null);
   }, []);
   
-  // Custom hook to play notification sound
   useEffect(() => {
     const playSound = () => {
       audioRef.current?.play().catch(e => console.error("Audio play failed:", e));
@@ -130,14 +135,27 @@ const App: React.FC = () => {
             ))}
           </nav>
           <div className="px-4 py-4 border-t border-slate-700">
-            <div className="flex items-center gap-3 px-2 py-2">
-              <UserCircleIcon className="w-10 h-10 text-slate-400" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold">{user?.name || 'Guest User'}</p>
-                <p className="text-xs text-slate-400">{user?.email || 'guest@local.com'}</p>
-                {isReadOnly && activeDbOwner && <p className="text-xs text-yellow-400 font-bold">Viewing: {activeDbOwner.name}</p>}
+            {/* Clickable Profile Section for Owners */}
+            <button 
+                onClick={isOwner ? () => setActiveTab('account') : undefined}
+                className={`w-full flex items-center gap-3 px-2 py-3 rounded-lg transition-all ${isOwner ? 'hover:bg-slate-700 cursor-pointer text-left' : 'cursor-default'}`}
+            >
+              <div className="relative">
+                {user?.companyLogo ? (
+                  <img src={user.companyLogo} className="w-10 h-10 rounded-full border border-slate-600 object-cover" alt="Logo" />
+                ) : (
+                  <UserCircleIcon className="w-10 h-10 text-slate-400" />
+                )}
+                {isOwner && <div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-0.5 border border-slate-800"><ChevronDownIcon className="w-2.5 h-2.5 text-white" /></div>}
               </div>
-            </div>
+              <div className="flex-1 overflow-hidden">
+                <p className="text-sm font-semibold truncate">{user?.name || 'Guest User'}</p>
+                <p className="text-xs text-slate-400 truncate">{user?.email || 'guest@local.com'}</p>
+                {isReadOnly && activeDbOwner && <p className="text-xs text-yellow-400 font-bold">Viewing: {activeDbOwner.name}</p>}
+                {isOwner && <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mt-0.5">Profile & Branding</p>}
+              </div>
+            </button>
+            
             <div className="mt-2 space-y-2">
                {!isReadOnly && user && (
                    <button onClick={() => setIsShareModalOpen(true)} title="Share Your Properties (Read-Only)" className="w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-700 hover:text-white">

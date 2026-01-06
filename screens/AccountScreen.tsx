@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Tab } from '../App';
-import { UserCircleIcon, ShareIcon, QuestionMarkCircleIcon, UsersIcon, DocumentChartBarIcon, BellIcon, ArrowUpTrayIcon, CheckCircleIcon, BuildingOfficeIcon, CurrencyDollarIcon } from '../components/Icons';
+import { UserCircleIcon, ShareIcon, QuestionMarkCircleIcon, UsersIcon, DocumentChartBarIcon, BellIcon, ArrowUpTrayIcon, CheckCircleIcon, BuildingOfficeIcon, TrashIcon, PlusIcon } from '../components/Icons';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 
@@ -20,19 +20,42 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
   const [companyName, setCompanyName] = useState(user?.companyName || '');
   const [companyAddress, setCompanyAddress] = useState(user?.companyAddress || '');
   const [companyPhone, setCompanyPhone] = useState(user?.companyPhone || '');
+  const [companyLogo, setCompanyLogo] = useState(user?.companyLogo || '');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const unacknowledgedCount = React.useMemo(() => {
     if (!user) return 0;
     return notifications.filter(n => n.recipientEmail.toLowerCase() === user.email.toLowerCase() && !n.isAcknowledged).length;
   }, [notifications, user]);
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 1024 * 500) { // 500kb limit
+        alert("Logo file is too large. Please select an image under 500KB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCompanyLogo(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeLogo = () => {
+    setCompanyLogo('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsSaving(true);
       try {
-          await updateProfile({ companyName, companyAddress, companyPhone });
+          await updateProfile({ companyName, companyAddress, companyPhone, companyLogo });
           setSaveSuccess(true);
           setTimeout(() => setSaveSuccess(false), 3000);
       } catch (e) {
@@ -63,11 +86,15 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
               <Card className="border-none shadow-lg bg-gradient-to-br from-blue-600 to-indigo-700 text-white overflow-visible relative">
                 <CardContent className="pt-8 pb-8 px-8">
                   <div className="flex flex-col sm:flex-row items-center gap-6">
-                    <div className="bg-white/20 p-1 rounded-full backdrop-blur-sm shadow-xl">
-                      <UserCircleIcon className="w-20 h-20 text-white" />
+                    <div className="bg-white/20 p-1 rounded-full backdrop-blur-sm shadow-xl relative group">
+                      {companyLogo ? (
+                        <img src={companyLogo} className="w-24 h-24 rounded-full object-cover border-2 border-white/50" alt="Company Logo" />
+                      ) : (
+                        <UserCircleIcon className="w-24 h-24 text-white" />
+                      )}
                     </div>
                     <div className="flex-1 text-center sm:text-left">
-                      <p className="text-2xl font-bold">{user?.name || 'Guest User'}</p>
+                      <p className="text-2xl font-bold">{companyName || user?.name || 'Guest User'}</p>
                       <p className="text-blue-100 opacity-90">{user?.email || 'guest@local.com'}</p>
                       <div className="mt-3 flex flex-wrap justify-center sm:justify-start gap-2">
                         {authStatus === 'authenticated' && !isReadOnly && (
@@ -92,15 +119,56 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
                     <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-5 px-8">
                       <div className="flex items-center gap-3">
                         <BuildingOfficeIcon className="w-6 h-6 text-blue-600" />
-                        <h3 className="font-bold text-xl text-slate-800 tracking-tight">Company Profile</h3>
+                        <h3 className="font-bold text-xl text-slate-800 tracking-tight">Company Profile & Branding</h3>
                       </div>
                     </CardHeader>
                     <CardContent className="p-8">
-                        <p className="text-sm text-slate-500 mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
+                        <p className="text-sm text-slate-500 mb-8 bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
                            <QuestionMarkCircleIcon className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                           <span>This information will be displayed as the sender on your <strong>Monthly Rental Statements</strong>.</span>
+                           <span>This information acts as your professional header on <strong>Monthly Rental Statements</strong> and other tenant communications.</span>
                         </p>
-                        <form onSubmit={handleSaveProfile} className="space-y-6">
+                        <form onSubmit={handleSaveProfile} className="space-y-8">
+                            <div className="flex flex-col sm:flex-row gap-8 items-start">
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-bold text-slate-700 uppercase tracking-wider mb-2">Company Logo</label>
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-24 h-24 bg-slate-100 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden">
+                                            {companyLogo ? (
+                                                <img src={companyLogo} className="w-full h-full object-cover" alt="Preview" />
+                                            ) : (
+                                                <BuildingOfficeIcon className="w-10 h-10 text-slate-300" />
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 shadow-sm"
+                                            >
+                                                Upload Logo
+                                            </button>
+                                            {companyLogo && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={removeLogo}
+                                                    className="px-4 py-2 text-sm font-bold text-red-600 hover:text-red-700 text-left flex items-center gap-1"
+                                                >
+                                                    <TrashIcon className="w-4 h-4" /> Remove
+                                                </button>
+                                            )}
+                                            <input 
+                                                type="file" 
+                                                ref={fileInputRef} 
+                                                onChange={handleLogoUpload} 
+                                                accept="image/*" 
+                                                className="hidden" 
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-1 italic">Best results with square images. PNG/JPG under 500KB.</p>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="block text-sm font-bold text-slate-700 uppercase tracking-wider">Company Name</label>
@@ -139,11 +207,11 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
                                     disabled={isSaving}
                                     className="px-8 py-3.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:bg-blue-300 flex items-center gap-2"
                                 >
-                                    {isSaving ? 'Saving Changes...' : 'Update Profile'}
+                                    {isSaving ? 'Saving Changes...' : 'Save Profile & Branding'}
                                 </button>
                                 {saveSuccess && (
-                                    <span className="text-green-600 font-bold flex items-center gap-1.5 animate-bounce">
-                                        <CheckCircleIcon className="w-5 h-5" /> Saved Successfully
+                                    <span className="text-green-600 font-bold flex items-center gap-1.5 animate-pulse">
+                                        <CheckCircleIcon className="w-5 h-5" /> All Changes Saved
                                     </span>
                                 )}
                             </div>
