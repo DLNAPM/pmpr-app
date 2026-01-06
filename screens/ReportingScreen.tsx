@@ -165,7 +165,6 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         // Company Logo if exists
         if (user?.companyLogo) {
             try {
-                // Ensure base64 is clean
                 const logoData = user.companyLogo;
                 doc.addImage(logoData, 'PNG', 20, 15, 25, 25);
             } catch (e) {
@@ -188,6 +187,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.text(`Phone: ${user?.companyPhone || '[Phone Not Provided]'}`, infoX, startY + 6 + (companyLines.length * 5));
 
         // Statement Info Box
+        doc.setDrawColor(200);
         doc.rect(140, 35, 55, 14); 
         doc.line(140, 42, 195, 42); 
         doc.line(168, 35, 168, 49); 
@@ -264,7 +264,6 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                 ]);
             }
         } else {
-             // If no record exists for this month yet, show standard rent as pending
              tableRows.push([
                 `${filters.reportMonth}/01/${filters.reportYear}`,
                 'INV-RENT',
@@ -293,7 +292,11 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
         doc.setFont('helvetica', 'bold');
         doc.text('TOTAL DUE', 135, finalY);
-        doc.rect(160, finalY - 6, 35, 9, 'F', [235, 240, 250]);
+        
+        // FIX: Corrected filled rectangle for "TOTAL DUE" to avoid black background
+        doc.setFillColor(235, 240, 250);
+        doc.rect(160, finalY - 6, 35, 9, 'F');
+        
         doc.setTextColor(0, 0, 0);
         doc.text('$', 162, finalY);
         doc.text(totalDue.toFixed(2), 193, finalY, { align: 'right' });
@@ -301,6 +304,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         // 4. REMITTANCE SLIP
         const slipY = 240;
         doc.setLineDash([2, 2]);
+        doc.setDrawColor(150);
         doc.line(20, slipY - 10, 190, slipY - 10);
         doc.setLineDash([]);
         doc.setFontSize(8);
@@ -328,6 +332,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
         doc.setFont('helvetica', 'bold');
         doc.text('AMOUNT PAID:', 120, slipY + 46);
+        doc.setDrawColor(0);
         doc.rect(155, slipY + 40, 40, 9);
         doc.text('$', 157, slipY + 46);
 
