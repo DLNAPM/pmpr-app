@@ -105,7 +105,6 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
         // Colors
         const primaryBlue = [51, 102, 204];
-        const darkGray = [80, 80, 80];
 
         // 1. Header Section
         doc.setFontSize(28);
@@ -302,13 +301,13 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
             const best = group.sort(
                 (a, b) => (b.paymentDate ? 1 : -1) - (a.paymentDate ? 1 : -1)
             )[0];
-            initialSelections[`payment-${index}`] = best.id;
+            initialSelections[`payment-group-${index}`] = best.id;
         });
         repairGroups.forEach((group, index) => {
             const best = group.sort(
                 (a, b) => (b.completionDate ? 1 : -1) - (a.completionDate ? 1 : -1)
             )[0];
-            initialSelections[`repair-${index}`] = best.id;
+            initialSelections[`repair-group-${index}`] = best.id;
         });
         setSelections(initialSelections);
         setIsReconcileModalOpen(true);
@@ -317,11 +316,11 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     const handleConfirmReconciliation = () => { 
         const recordsToDelete: {type: 'payment' | 'repair', id: string}[] = []; 
         duplicatePayments.forEach((group, index) => { 
-            const keepId = selections[`payment-${index}`]; 
+            const keepId = selections[`payment-group-${index}`]; 
             group.forEach(p => { if (p.id !== keepId) recordsToDelete.push({type: 'payment', id: p.id}) }); 
         }); 
         duplicateRepairs.forEach((group, index) => { 
-            const keepId = selections[`repair-${index}`]; 
+            const keepId = selections[`repair-group-${index}`]; 
             group.forEach(r => { if (r.id !== keepId) recordsToDelete.push({type: 'repair', id: r.id}) }); 
         }); 
         if (window.confirm(`Are you sure you want to delete ${recordsToDelete.length} duplicate record(s)?`)) { 
@@ -387,7 +386,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                 </div>
             </CardContent>
              {importPreview && ( <Modal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} title="Import Preview"> <div className="space-y-4"> <p>Found <strong>{importPreview.validRecords.length}</strong> valid records and <strong>{importPreview.errors.length}</strong> errors.</p> {importPreview.errors.length > 0 && ( <div> <h4 className="font-semibold text-red-600">Errors:</h4> <ul className="text-sm text-red-500 list-disc list-inside max-h-40 overflow-y-auto bg-red-50 p-2 rounded"> {importPreview.errors.map(err => <li key={err.row}>Row {err.row}: {err.message}</li>)} </ul> </div> )} <p className="text-sm text-gray-600">Only valid records will be imported. Please review before continuing.</p> <div className="flex justify-end gap-2 pt-4"> <button onClick={() => setIsImportModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button> <button onClick={handleConfirmImport} disabled={importPreview.validRecords.length === 0} className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400">Confirm Import</button> </div> </div> </Modal> )}
-            {isReconcileModalOpen && ( <Modal isOpen={isReconcileModalOpen} onClose={() => setIsReconcileModalOpen(false)} title="Reconcile Duplicate Records"> <div className="space-y-6 max-h-[60vh] overflow-y-auto p-1"> {(duplicatePayments.length + duplicateRepairs.length) === 0 ? ( <p>No duplicate records found.</p> ) : ( <> {duplicatePayments.map((group, index) => ( <Card key={`payment-group-${index}`}> <CardHeader><p className="font-semibold">Duplicate Payments: {properties.find(p => p.id === group[0].propertyId)?.name} - {MONTHS[group[0].month - 1]} {group[0].year}</p></CardHeader> <CardContent className="space-y-2"> {group.map(p => ( <label key={p.id} className="block p-2 border rounded has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500"> <input type="radio" name={`payment-group-${index}`} value={p.id} checked={selections[`payment-group-${index}`] === p.id} onChange={(e) => setSelections(s => ({...s, [`payment-group-${index}`]: e.target.value}))}/> <span className="ml-2">Rent: ${p.rentPaidAmount}/${p.rentBillAmount} | Utilities: ${p.utilities.reduce((sum, u) => sum + u.paidAmount, 0)}/${p.utilities.reduce((sum, u) => sum + u.billAmount, 0)}</span> <p className="text-xs text-gray-500 ml-5">Last Updated: {p.paymentDate ? new Date(p.paymentDate).toLocaleString() : 'N/A'}</p> </label> ))} </CardContent> </Card> ))} {duplicateRepairs.map((group, index) => ( <Card key={`repair-group-${index}`}> <CardHeader><p className="font-semibold">Duplicate Repairs: {properties.find(p => p.id === group[0].propertyId)?.name}</p></CardHeader> <CardContent className="space-y-2"> <p className="text-sm italic">{group[0].description}</p {group.map(r => ( <label key={r.id} className="block p-2 border rounded has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500"> <input type="radio" name={`repair-group-${index}`} value={r.id} checked={selections[`repair-group-${index}`] === r.id} onChange={(e) => setSelections(s => ({...s, [`repair-group-${index}`]: e.target.value}))}/> <span className="ml-2">Cost: ${r.cost} | Status: {r.status}</span> <p className="text-xs text-gray-500 ml-5">Completed: {r.completionDate ? new Date(r.completionDate).toLocaleDateString() : 'N/A'}</p> </label> ))} </CardContent> </Card> ))} </> )} <div className="flex justify-end gap-2 pt-4"> <button onClick={() => setIsReconcileModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button> <button onClick={handleConfirmReconciliation} disabled={(duplicatePayments.length + duplicateRepairs.length) === 0} className="px-4 py-2 bg-red-600 text-white rounded disabled:bg-gray-400">Confirm & Delete</button> </div> </div> </Modal> )}
+            {isReconcileModalOpen && ( <Modal isOpen={isReconcileModalOpen} onClose={() => setIsReconcileModalOpen(false)} title="Reconcile Duplicate Records"> <div className="space-y-6 max-h-[60vh] overflow-y-auto p-1"> {(duplicatePayments.length + duplicateRepairs.length) === 0 ? ( <p>No duplicate records found.</p> ) : ( <> {duplicatePayments.map((group, index) => ( <Card key={`payment-group-${index}`}> <CardHeader><p className="font-semibold">Duplicate Payments: {properties.find(p => p.id === group[0].propertyId)?.name} - {MONTHS[group[0].month - 1]} {group[0].year}</p></CardHeader> <CardContent className="space-y-2"> {group.map(p => ( <label key={p.id} className="block p-2 border rounded has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500"> <input type="radio" name={`payment-group-${index}`} value={p.id} checked={selections[`payment-group-${index}`] === p.id} onChange={(e) => setSelections(s => ({...s, [`payment-group-${index}`]: e.target.value}))}/> <span className="ml-2">Rent: ${p.rentPaidAmount}/${p.rentBillAmount} | Utilities: ${p.utilities.reduce((sum, u) => sum + u.paidAmount, 0)}/${p.utilities.reduce((sum, u) => sum + u.billAmount, 0)}</span> <p className="text-xs text-gray-500 ml-5">Last Updated: {p.paymentDate ? new Date(p.paymentDate).toLocaleString() : 'N/A'}</p> </label> ))} </CardContent> </Card> ))} {duplicateRepairs.map((group, index) => ( <Card key={`repair-group-${index}`}> <CardHeader><p className="font-semibold">Duplicate Repairs: {properties.find(p => p.id === group[0].propertyId)?.name}</p></CardHeader> <CardContent className="space-y-2"> <p className="text-sm italic">{group[0].description}</p> {group.map(r => ( <label key={r.id} className="block p-2 border rounded has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500"> <input type="radio" name={`repair-group-${index}`} value={r.id} checked={selections[`repair-group-${index}`] === r.id} onChange={(e) => setSelections(s => ({...s, [`repair-group-${index}`]: e.target.value}))}/> <span className="ml-2">Cost: ${r.cost} | Status: {r.status}</span> <p className="text-xs text-gray-500 ml-5">Completed: {r.completionDate ? new Date(r.completionDate).toLocaleDateString() : 'N/A'}</p> </label> ))} </CardContent> </Card> ))} </> )} <div className="flex justify-end gap-2 pt-4"> <button onClick={() => setIsReconcileModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded">Cancel</button> <button onClick={handleConfirmReconciliation} disabled={(duplicatePayments.length + duplicateRepairs.length) === 0} className="px-4 py-2 bg-red-600 text-white rounded disabled:bg-gray-400">Confirm & Delete</button> </div> </div> </Modal> )}
         </Card>
     );
 };
