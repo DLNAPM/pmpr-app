@@ -103,7 +103,8 @@ export interface Notification {
 export interface UserProfile {
   companyName?: string;
   companyAddress?: string;
-  phone?: string;
+  companyPhone?: string;
+  companyLogoUrl?: string;
 }
 
 export interface User extends UserProfile {

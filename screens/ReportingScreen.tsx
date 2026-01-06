@@ -91,7 +91,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
     const handleExport = () => { const headers = ['Date', 'Property Name', 'Type', 'Category', 'Bill Amount', 'Paid Amount', 'Balance']; const rows = reportData.map(item => [ new Date(item.date).toLocaleDateString(), `"${item.propertyName.replace(/"/g, '""')}"`, item.type, item.category, item.billAmount, item.paidAmount, item.balance ].join(',')); const csvContent = [headers.join(','), ...rows].join('\n'); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.setAttribute('href', URL.createObjectURL(blob)); link.setAttribute('download', `pmpr_report_${new Date().toISOString().split('T')[0]}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
     
-    const handleGenerateStatement = () => {
+    const handleGenerateRentalStatement = () => {
         if (filters.propertyId === 'all') {
             alert("Please select a specific Property to generate a statement.");
             return;
@@ -103,100 +103,108 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         const { jsPDF } = jspdf;
         const doc = new jsPDF();
 
-        // Colors
-        const primaryBlue = [51, 102, 204];
+        // BRANDING COLORS
+        const brandBlue = [51, 102, 204];
+        const textDark = [50, 50, 50];
 
-        // 1. Header Section
+        // 1. HEADER SECTION (Logo & Title)
         doc.setFontSize(28);
-        doc.setTextColor(...primaryBlue);
+        doc.setTextColor(...brandBlue);
         doc.setFont('helvetica', 'bold');
         doc.text('STATEMENT', 140, 25);
 
-        doc.setFontSize(12);
-        doc.setTextColor(0, 0, 0);
-        doc.text(user?.companyName || '[Rental Company]', 20, 25);
-        doc.setFont('helvetica', 'normal');
+        // Company Branding from Profile
+        doc.setFontSize(14);
+        doc.setTextColor(...textDark);
+        doc.text(user?.companyName || '[Company Name]', 20, 25);
         doc.setFontSize(10);
-        const addressLines = (user?.companyAddress || '[Street Address]\n[City, ST ZIP]').split('\n');
-        addressLines.forEach((line, i) => doc.text(line, 20, 31 + (i * 5)));
-        doc.text(`Phone: ${user?.phone || '000-000-0000'}`, 20, 31 + (addressLines.length * 5));
+        doc.setFont('helvetica', 'normal');
+        const companyLines = (user?.companyAddress || '[Company Address]\n[City, ST ZIP]').split('\n');
+        companyLines.forEach((line, i) => {
+            doc.text(line, 20, 31 + (i * 5));
+        });
+        doc.text(`Phone: ${user?.companyPhone || '[Company Phone]'}`, 20, 31 + (companyLines.length * 5));
 
-        // Statement Date & Customer ID Box
-        doc.rect(140, 35, 55, 14); // Outer box
-        doc.line(140, 42, 195, 42); // Middle line
-        doc.line(170, 35, 170, 49); // Vertical line
+        // Statement Info Box
+        doc.rect(140, 38, 55, 14); // Box
+        doc.line(140, 45, 195, 45); // Middle horizontal
+        doc.line(168, 38, 168, 52); // Center vertical
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.text('Statement Date', 142, 40);
-        doc.text('Customer ID', 142, 47);
+        doc.text('Statement Date', 142, 43);
+        doc.text('Customer ID', 142, 50);
         doc.setFont('helvetica', 'normal');
-        doc.text(new Date().toLocaleDateString(), 172, 40);
-        doc.text(`[${selectedProperty.id.substring(0, 6).toUpperCase()}]`, 172, 47);
+        doc.text(new Date().toLocaleDateString(), 170, 43);
+        doc.text(selectedProperty.id.substring(0, 6).toUpperCase(), 170, 50);
 
-        // 2. Billing & Property Info
+        // 2. BILL TO & PROPERTY INFO
         doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
-        doc.text('Bill To:', 20, 65);
+        doc.text('Bill To:', 20, 70);
         doc.setFont('helvetica', 'normal');
         const mainTenant = selectedProperty.tenants[0];
-        doc.text(mainTenant?.name || '[Customer Name]', 35, 65);
-        doc.text(selectedProperty.address, 35, 71);
-        doc.text(mainTenant?.phone || '[Phone]', 35, 77);
+        doc.text(mainTenant?.name || '[Tenant Name]', 35, 70);
+        doc.text(selectedProperty.address, 35, 76);
+        doc.text(mainTenant?.phone || '[Phone]', 35, 82);
 
         doc.setFont('helvetica', 'bold');
-        doc.text('Property', 110, 65);
+        doc.text('Property:', 110, 70);
         doc.setFont('helvetica', 'normal');
-        doc.text(selectedProperty.address, 130, 65);
-        doc.text('Contract From', 110, 77);
-        doc.text(new Date(selectedProperty.leaseStart).toLocaleDateString(), 145, 77);
-        doc.text('To', 170, 77);
-        doc.text(new Date(selectedProperty.leaseEnd).toLocaleDateString(), 180, 77);
-
-        // 3. Transactions Table
+        doc.text(selectedProperty.name, 130, 70);
+        doc.text(selectedProperty.address, 130, 76);
         doc.setFont('helvetica', 'bold');
-        doc.text('Account Activity', 20, 95);
+        doc.text('Contract From:', 110, 88);
+        doc.setFont('helvetica', 'normal');
+        doc.text(new Date(selectedProperty.leaseStart).toLocaleDateString(), 140, 88);
+        doc.setFont('helvetica', 'bold');
+        doc.text('To:', 165, 88);
+        doc.setFont('helvetica', 'normal');
+        doc.text(new Date(selectedProperty.leaseEnd).toLocaleDateString(), 175, 88);
 
-        // Logic: Get balance forward
+        // 3. ACCOUNT ACTIVITY (The Table)
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.text('Account Activity', 20, 105);
+
+        // Calculation: Balance Forward
         const prevPayments = payments.filter(p => 
             p.propertyId === selectedProperty.id && 
             (p.year < filters.reportYear || (p.year === filters.reportYear && p.month < filters.reportMonth))
         );
-        const prevBilled = prevPayments.reduce((sum, p) => {
-            let b = p.rentBillAmount + p.utilities.reduce((s, u) => s + u.billAmount, 0);
-            return sum + b;
-        }, 0);
-        const prevPaid = prevPayments.reduce((sum, p) => {
-            let pd = p.rentPaidAmount + p.utilities.reduce((s, u) => s + u.paidAmount, 0);
-            return sum + pd;
-        }, 0);
+        const prevBilled = prevPayments.reduce((sum, p) => sum + p.rentBillAmount + p.utilities.reduce((s, u) => s + u.billAmount, 0), 0);
+        const prevPaid = prevPayments.reduce((sum, p) => sum + p.rentPaidAmount + p.utilities.reduce((s, u) => s + u.paidAmount, 0), 0);
         const balanceForward = prevBilled - prevPaid;
 
-        // Transactions for the current month
+        // Current Month Data
         const currentMonthTransactions: any[] = [];
-        const monthPayment = payments.find(p => p.propertyId === selectedProperty.id && p.year === filters.reportYear && p.month === filters.reportMonth);
+        const currentMonthPayment = payments.find(p => p.propertyId === selectedProperty.id && p.year === filters.reportYear && p.month === filters.reportMonth);
         
-        if (monthPayment) {
+        if (currentMonthPayment) {
+            // Invoice items
             currentMonthTransactions.push([
-                `${monthPayment.month}/1/${monthPayment.year.toString().slice(-2)}`,
-                `INV ${monthPayment.id.substring(0,4).toUpperCase()}`,
-                `Rent for ${MONTHS[monthPayment.month-1]} '${monthPayment.year.toString().slice(-2)}`,
-                monthPayment.rentBillAmount.toFixed(2)
+                `${filters.reportMonth}/01/${filters.reportYear.toString().slice(-2)}`,
+                'INV-RENT',
+                `Rent for ${MONTHS[filters.reportMonth-1]} '${filters.reportYear.toString().slice(-2)}`,
+                currentMonthPayment.rentBillAmount.toFixed(2)
             ]);
-            monthPayment.utilities.forEach(u => {
+            
+            currentMonthPayment.utilities.forEach(u => {
                 if (u.billAmount > 0) {
                     currentMonthTransactions.push([
-                        `${monthPayment.month}/1/${monthPayment.year.toString().slice(-2)}`,
-                        '',
+                        `${filters.reportMonth}/01/${filters.reportYear.toString().slice(-2)}`,
+                        'INV-UTIL',
                         u.category,
                         u.billAmount.toFixed(2)
                     ]);
                 }
             });
-            if (monthPayment.rentPaidAmount > 0 || monthPayment.utilities.some(u => u.paidAmount > 0)) {
-                const totalPaid = monthPayment.rentPaidAmount + monthPayment.utilities.reduce((s, u) => s + u.paidAmount, 0);
+
+            // Payment items
+            if (currentMonthPayment.rentPaidAmount > 0 || currentMonthPayment.utilities.some(u => u.paidAmount > 0)) {
+                const totalPaid = currentMonthPayment.rentPaidAmount + currentMonthPayment.utilities.reduce((s, u) => s + u.paidAmount, 0);
                 currentMonthTransactions.push([
-                    monthPayment.paymentDate ? new Date(monthPayment.paymentDate).toLocaleDateString() : '',
-                    'PMT',
+                    currentMonthPayment.paymentDate ? new Date(currentMonthPayment.paymentDate).toLocaleDateString() : '',
+                    'PMT-RCVD',
                     'Payment Received - Thank you',
                     `-${totalPaid.toFixed(2)}`
                 ]);
@@ -211,62 +219,71 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.autoTable({
             head: [['DATE', 'REF', 'DESCRIPTION', 'AMOUNT']],
             body: tableBody,
-            startY: 100,
+            startY: 110,
             theme: 'striped',
-            headStyles: { fillColor: primaryBlue, textColor: [255, 255, 255] },
+            headStyles: { fillColor: brandBlue, textColor: [255, 255, 255] },
             columnStyles: { 3: { halign: 'right' } },
+            margin: { left: 20, right: 20 }
         });
 
+        // 4. SUMMARY & TOTALS
         const finalY = (doc as any).lastAutoTable.finalY + 10;
-        const currentTotalBilled = (monthPayment?.rentBillAmount || 0) + (monthPayment?.utilities.reduce((s, u) => s + u.billAmount, 0) || 0);
-        const currentTotalPaid = (monthPayment?.rentPaidAmount || 0) + (monthPayment?.utilities.reduce((s, u) => s + u.paidAmount, 0) || 0);
-        const totalDue = balanceForward + currentTotalBilled - currentTotalPaid;
+        const currentBilled = (currentMonthPayment?.rentBillAmount || 0) + (currentMonthPayment?.utilities.reduce((s, u) => s + u.billAmount, 0) || 0);
+        const currentPaid = (currentMonthPayment?.rentPaidAmount || 0) + (currentMonthPayment?.utilities.reduce((s, u) => s + u.paidAmount, 0) || 0);
+        const totalDue = balanceForward + currentBilled - currentPaid;
 
         doc.setFont('helvetica', 'bold');
-        doc.text('BALANCE', 140, finalY);
-        doc.rect(160, finalY - 6, 35, 8, 'F', [220, 230, 250]);
-        doc.setTextColor(0,0,0);
-        doc.text('$', 162, finalY);
-        doc.text(totalDue.toFixed(2), 193, finalY, { align: 'right' });
+        doc.text('BALANCE', 135, finalY);
+        doc.rect(158, finalY - 6, 37, 9, 'F', [235, 240, 250]);
+        doc.setTextColor(0, 0, 0);
+        doc.text('$', 160, finalY);
+        doc.text(totalDue.toLocaleString('en-US', { minimumFractionDigits: 2 }), 193, finalY, { align: 'right' });
         
         doc.setFontSize(9);
-        doc.setTextColor(50);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100);
         doc.text('Please pay this remaining balance. Thank you.', 135, finalY + 8);
 
-        // 4. Remittance Slip
-        const footerY = 240;
+        // 5. REMITTANCE SLIP (Bottom Part)
+        const slipY = 240;
         doc.setLineDash([2, 2]);
-        doc.line(20, footerY - 10, 190, footerY - 10);
+        doc.line(20, slipY - 10, 190, slipY - 10);
         doc.setLineDash([]);
         doc.setFontSize(8);
-        doc.text('Please detach the remittance slip below and return it with your payment.', 20, footerY - 5);
+        doc.text('Please detach the remittance slip below and return it with your payment.', 20, slipY - 5);
 
         doc.setFontSize(11);
-        doc.setTextColor(...primaryBlue);
-        doc.text('REMITTANCE', 95, footerY + 5);
+        doc.setTextColor(...brandBlue);
+        doc.setFont('helvetica', 'bold');
+        doc.text('REMITTANCE', 95, slipY + 5);
 
         doc.setFontSize(10);
-        doc.setTextColor(0,0,0);
-        doc.text('Please make checks payable to:', 20, footerY + 15);
-        doc.text(user?.companyName || user?.name || '', 20, footerY + 21);
-        addressLines.forEach((line, i) => doc.text(line, 20, footerY + 27 + (i * 5)));
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Please make checks payable to:', 20, slipY + 15);
+        doc.setFont('helvetica', 'bold');
+        doc.text(user?.companyName || user?.name || '[Payee Name]', 20, slipY + 21);
+        doc.setFont('helvetica', 'normal');
+        companyLines.forEach((line, i) => {
+            doc.text(line, 20, slipY + 27 + (i * 5));
+        });
 
-        doc.text('STATEMENT DATE', 120, footerY + 15);
-        doc.text(new Date().toLocaleDateString(), 170, footerY + 15);
-        doc.text('CUSTOMER ID', 120, footerY + 21);
-        doc.text(`[${selectedProperty.id.substring(0, 6).toUpperCase()}]`, 170, footerY + 21);
+        doc.text('STATEMENT DATE', 120, slipY + 15);
+        doc.text(new Date().toLocaleDateString(), 170, slipY + 15);
+        doc.text('CUSTOMER ID', 120, slipY + 21);
+        doc.text(selectedProperty.id.substring(0, 6).toUpperCase(), 170, slipY + 21);
 
-        doc.text('DUE DATE', 130, footerY + 35);
-        doc.rect(155, footerY + 30, 40, 8);
-        doc.text('UPON RECEIPT', 157, footerY + 35);
+        doc.text('DUE DATE', 130, slipY + 36);
+        doc.rect(155, slipY + 31, 40, 8);
+        doc.text('UPON RECEIPT', 157, slipY + 36.5);
 
         doc.setFont('helvetica', 'bold');
-        doc.text('BALANCE DUE', 123, footerY + 45);
-        doc.rect(155, footerY + 40, 40, 8);
-        doc.text('$', 157, footerY + 45);
-        doc.text(totalDue.toFixed(2), 193, footerY + 45, { align: 'right' });
+        doc.text('BALANCE DUE', 123, slipY + 46);
+        doc.rect(155, slipY + 41, 40, 8);
+        doc.text('$', 157, slipY + 46.5);
+        doc.text(totalDue.toLocaleString('en-US', { minimumFractionDigits: 2 }), 193, slipY + 46.5, { align: 'right' });
 
-        doc.save(`statement_${selectedProperty.name.replace(/\s/g, '_')}_${MONTHS[filters.reportMonth-1]}.pdf`);
+        doc.save(`RentalStatement_${selectedProperty.name.replace(/\s/g, '_')}_${MONTHS[filters.reportMonth-1]}.pdf`);
     };
 
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = e => processCsv(e.target?.result as string); reader.readAsText(file); } if(fileInputRef.current) fileInputRef.current.value = ""; };
@@ -336,9 +353,13 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <h2 className="text-2xl font-bold">Reporting</h2>
                     <div className="flex flex-wrap gap-2">
-                        <button onClick={handleGenerateStatement} className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white border border-blue-600 rounded-md shadow-sm hover:bg-blue-700">
+                        <button 
+                            onClick={handleGenerateRentalStatement} 
+                            title="Download Professional Rental Statement"
+                            className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-600 text-white border border-indigo-600 rounded-lg shadow hover:bg-indigo-700 transition-all font-bold"
+                        >
                             <CreditCardIcon className="w-4 h-4" /> 
-                            Rental Statement
+                            Rental Statement (PDF)
                         </button>
                         <button onClick={handleReconcile} disabled={isReadOnly} className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:bg-gray-200">
                             <ShieldCheckIcon className="w-4 h-4 text-green-600" /> 
@@ -357,25 +378,25 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                 </div>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-4 p-4 bg-slate-50 rounded-lg"> 
-                    <select name="type" value={filters.type} onChange={handleFilterChange} className="p-2 border rounded"> <option value="all">All Types</option> <option value="Rent">Rent</option> <option value="Utility">Utility</option> <option value="Repair">Repair</option> </select> 
-                    <select name="propertyId" value={filters.propertyId} onChange={handleFilterChange} className="p-2 border rounded"> <option value="all">All Properties</option> {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)} </select> 
-                    <select name="tenantId" value={filters.tenantId} onChange={handleFilterChange} className="p-2 border rounded"> <option value="all">All Tenants</option> {tenants.map(t => <option key={t.id} value={t.id}>{t.name} ({t.propertyName})</option>)} </select> 
-                    <select name="status" value={filters.status} onChange={handleFilterChange} className="p-2 border rounded"> <option value="all">All Status</option> <option value="collected">Collected</option> <option value="outstanding">Outstanding</option> </select> 
-                    {filters.type === 'Repair' && ( <select name="repairStatus" value={filters.repairStatus} onChange={handleFilterChange} className="p-2 border rounded"> <option value="all">All Repair Status</option> <option value="open">Open</option> <option value="completed">Completed</option> </select> )} 
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-4 p-4 bg-slate-50 rounded-lg border border-slate-100 shadow-inner"> 
+                    <select name="type" value={filters.type} onChange={handleFilterChange} className="p-2 border rounded-md shadow-sm"> <option value="all">All Types</option> <option value="Rent">Rent</option> <option value="Utility">Utility</option> <option value="Repair">Repair</option> </select> 
+                    <select name="propertyId" value={filters.propertyId} onChange={handleFilterChange} className="p-2 border rounded-md shadow-sm"> <option value="all">All Properties</option> {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)} </select> 
+                    <select name="tenantId" value={filters.tenantId} onChange={handleFilterChange} className="p-2 border rounded-md shadow-sm"> <option value="all">All Tenants</option> {tenants.map(t => <option key={t.id} value={t.id}>{t.name} ({t.propertyName})</option>)} </select> 
+                    <select name="status" value={filters.status} onChange={handleFilterChange} className="p-2 border rounded-md shadow-sm"> <option value="all">All Status</option> <option value="collected">Collected</option> <option value="outstanding">Outstanding</option> </select> 
+                    {filters.type === 'Repair' && ( <select name="repairStatus" value={filters.repairStatus} onChange={handleFilterChange} className="p-2 border rounded-md shadow-sm"> <option value="all">All Repair Status</option> <option value="open">Open</option> <option value="completed">Completed</option> </select> )} 
                     <div className="flex gap-2 lg:col-span-2">
-                        <select name="reportMonth" value={filters.reportMonth} onChange={handleFilterChange} className="p-2 border rounded flex-1">
+                        <select name="reportMonth" value={filters.reportMonth} onChange={handleFilterChange} className="p-2 border rounded-md shadow-sm flex-1">
                             {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                         </select>
-                        <input type="number" name="reportYear" value={filters.reportYear} onChange={handleFilterChange} className="p-2 border rounded w-24"/>
+                        <input type="number" name="reportYear" value={filters.reportYear} onChange={handleFilterChange} className="p-2 border rounded-md shadow-sm w-24"/>
                     </div>
                     <div className="lg:col-span-3 flex items-center gap-2">
                          <span className="text-xs font-semibold text-gray-500 uppercase">Range:</span>
-                         <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} className="p-2 border rounded flex-1"/> 
-                         <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} className="p-2 border rounded flex-1"/> 
+                         <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} className="p-2 border rounded-md shadow-sm flex-1"/> 
+                         <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} className="p-2 border rounded-md shadow-sm flex-1"/> 
                     </div>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto rounded-lg border border-slate-100">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50"> <tr> <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th> <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property / Tenant</th> <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type / Category</th> <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Bill</th> <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th> <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th> <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th> </tr> </thead>
                         <tbody className="bg-white divide-y divide-gray-200">

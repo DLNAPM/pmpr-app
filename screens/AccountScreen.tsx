@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Tab } from '../App';
-import { UserCircleIcon, ShareIcon, QuestionMarkCircleIcon, UsersIcon, DocumentChartBarIcon, BellIcon, ArrowUpTrayIcon, CheckCircleIcon } from '../components/Icons';
+import { UserCircleIcon, ShareIcon, QuestionMarkCircleIcon, UsersIcon, DocumentChartBarIcon, BellIcon, ArrowUpTrayIcon, CheckCircleIcon, BuildingOfficeIcon, CurrencyDollarIcon } from '../components/Icons';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 
@@ -19,7 +19,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
 
   const [companyName, setCompanyName] = useState(user?.companyName || '');
   const [companyAddress, setCompanyAddress] = useState(user?.companyAddress || '');
-  const [phone, setPhone] = useState(user?.phone || '');
+  const [companyPhone, setCompanyPhone] = useState(user?.companyPhone || '');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -32,7 +32,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
       e.preventDefault();
       setIsSaving(true);
       try {
-          await updateProfile({ companyName, companyAddress, phone });
+          await updateProfile({ companyName, companyAddress, companyPhone });
           setSaveSuccess(true);
           setTimeout(() => setSaveSuccess(false), 3000);
       } catch (e) {
@@ -54,74 +54,96 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
   ];
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6">Account</h2>
+    <div className="max-w-5xl mx-auto pb-10">
+      <h2 className="text-3xl font-extrabold text-slate-900 mb-8">Account & Profile</h2>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-              <Card>
-                <CardContent>
-                  <div className="flex items-center gap-4">
-                    <UserCircleIcon className="w-16 h-16 text-slate-400" />
-                    <div className="flex-1">
-                      <p className="text-xl font-semibold">{user?.name || 'Guest User'}</p>
-                      <p className="text-sm text-slate-500">{user?.email || 'guest@local.com'}</p>
-                      {authStatus === 'authenticated' && !isReadOnly && (
-                        <span className="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Cloud Synced
-                        </span>
-                      )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
+              {/* User Identity Card */}
+              <Card className="border-none shadow-lg bg-gradient-to-br from-blue-600 to-indigo-700 text-white overflow-visible relative">
+                <CardContent className="pt-8 pb-8 px-8">
+                  <div className="flex flex-col sm:flex-row items-center gap-6">
+                    <div className="bg-white/20 p-1 rounded-full backdrop-blur-sm shadow-xl">
+                      <UserCircleIcon className="w-20 h-20 text-white" />
+                    </div>
+                    <div className="flex-1 text-center sm:text-left">
+                      <p className="text-2xl font-bold">{user?.name || 'Guest User'}</p>
+                      <p className="text-blue-100 opacity-90">{user?.email || 'guest@local.com'}</p>
+                      <div className="mt-3 flex flex-wrap justify-center sm:justify-start gap-2">
+                        {authStatus === 'authenticated' && !isReadOnly && (
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white/20 backdrop-blur-md text-white border border-white/30">
+                            <CheckCircleIcon className="w-3.5 h-3.5 mr-1" /> Cloud Account
+                          </span>
+                        )}
+                        {isReadOnly && (
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-yellow-400 text-yellow-900">
+                             Viewer Access
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
+              {/* Company Profile Section */}
               {authStatus === 'authenticated' && !isReadOnly && (
-                <Card>
-                    <CardHeader><h3 className="font-semibold text-lg">Company Information</h3></CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleSaveProfile} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Company Name</label>
-                                <input 
-                                    type="text" 
-                                    value={companyName} 
-                                    onChange={(e) => setCompanyName(e.target.value)} 
-                                    placeholder="e.g., C&SH Group Properties, LLC"
-                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                />
+                <Card className="shadow-lg border-slate-200">
+                    <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-5 px-8">
+                      <div className="flex items-center gap-3">
+                        <BuildingOfficeIcon className="w-6 h-6 text-blue-600" />
+                        <h3 className="font-bold text-xl text-slate-800 tracking-tight">Company Profile</h3>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-8">
+                        <p className="text-sm text-slate-500 mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
+                           <QuestionMarkCircleIcon className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                           <span>This information will be displayed as the sender on your <strong>Monthly Rental Statements</strong>.</span>
+                        </p>
+                        <form onSubmit={handleSaveProfile} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-bold text-slate-700 uppercase tracking-wider">Company Name</label>
+                                    <input 
+                                        type="text" 
+                                        value={companyName} 
+                                        onChange={(e) => setCompanyName(e.target.value)} 
+                                        placeholder="e.g., C&SH Group Properties, LLC"
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-bold text-slate-700 uppercase tracking-wider">Business Phone</label>
+                                    <input 
+                                        type="tel" 
+                                        value={companyPhone} 
+                                        onChange={(e) => setCompanyPhone(e.target.value)} 
+                                        placeholder="000-000-0000"
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none"
+                                    />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Business Address</label>
+                            <div className="space-y-2">
+                                <label className="block text-sm font-bold text-slate-700 uppercase tracking-wider">Business Address</label>
                                 <textarea 
                                     value={companyAddress} 
                                     onChange={(e) => setCompanyAddress(e.target.value)} 
                                     placeholder="Street, City, ST ZIP"
-                                    rows={2}
-                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                    rows={3}
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all outline-none resize-none"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Business Phone</label>
-                                <input 
-                                    type="tel" 
-                                    value={phone} 
-                                    onChange={(e) => setPhone(e.target.value)} 
-                                    placeholder="000-000-0000"
-                                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                />
-                            </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center justify-between pt-4">
                                 <button 
                                     type="submit" 
                                     disabled={isSaving}
-                                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400 flex items-center gap-2"
+                                    className="px-8 py-3.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:bg-blue-300 flex items-center gap-2"
                                 >
-                                    {isSaving ? 'Saving...' : 'Save Changes'}
+                                    {isSaving ? 'Saving Changes...' : 'Update Profile'}
                                 </button>
                                 {saveSuccess && (
-                                    <span className="text-green-600 text-sm font-medium flex items-center gap-1">
-                                        <CheckCircleIcon className="w-5 h-5" /> Profile updated
+                                    <span className="text-green-600 font-bold flex items-center gap-1.5 animate-bounce">
+                                        <CheckCircleIcon className="w-5 h-5" /> Saved Successfully
                                     </span>
                                 )}
                             </div>
@@ -131,55 +153,64 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
               )}
           </div>
 
+          {/* Sidebar Navigation */}
           <div className="space-y-6">
               {authStatus === 'authenticated' && !isReadOnly && hasGuestData && (
-                <Card className="border-blue-200 bg-blue-50">
-                  <CardContent>
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="bg-blue-100 p-3 rounded-full">
+                <Card className="border-blue-200 bg-blue-50 overflow-hidden">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col items-center text-center gap-4">
+                      <div className="bg-blue-100 p-4 rounded-full shadow-inner">
                         <ArrowUpTrayIcon className="w-8 h-8 text-blue-600" />
                       </div>
-                      <div className="text-center">
-                        <h3 className="font-bold text-blue-900">Sync Local Data</h3>
-                        <p className="text-xs text-blue-700 mt-1">We detected local data. Migrate it to your Google Cloud account?</p>
+                      <div>
+                        <h3 className="font-bold text-blue-900 text-lg">Unsynced Data Detected</h3>
+                        <p className="text-sm text-blue-700 mt-1">You have property records stored in this browser. Move them to your cloud account to sync across all devices.</p>
                       </div>
                       <button 
                         onClick={migrateGuestData}
                         disabled={isLoading}
-                        className="w-full px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400"
+                        className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:opacity-50"
                       >
-                        {isLoading ? 'Syncing...' : 'Sync Now'}
+                        {isLoading ? 'Processing...' : 'Migrate to Cloud'}
                       </button>
                     </div>
                   </CardContent>
                 </Card>
               )}
 
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">Navigation</h3>
-              <div className="bg-white rounded-lg shadow-md overflow-hidden divide-y divide-gray-200">
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
+                  <div className="px-6 py-4 bg-slate-50/50">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Management tools</h4>
+                  </div>
                   {menuItems.map(item => (
-                      <button key={item.tab} onClick={() => onNavigate(item.tab)} className="w-full flex justify-between items-center p-4 text-left hover:bg-slate-50">
+                      <button key={item.tab} onClick={() => onNavigate(item.tab)} className="w-full flex justify-between items-center px-6 py-5 text-left hover:bg-blue-50 transition-colors group">
                          <div className="flex items-center gap-4">
-                              <item.icon className="w-6 h-6 text-slate-500" />
-                              <span className="font-medium text-gray-800">{item.label}</span>
+                              <div className="p-2 bg-slate-100 rounded-lg text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                <item.icon className="w-6 h-6" />
+                              </div>
+                              <span className="font-bold text-slate-700">{item.label}</span>
                          </div>
-                         {item.badge > 0 && <span className="bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">{item.badge}</span>}
+                         {item.badge > 0 && <span className="bg-red-500 text-white text-xs font-black rounded-full h-6 w-6 flex items-center justify-center shadow-lg shadow-red-200">{item.badge}</span>}
                       </button>
                   ))}
                   {actionItems.map(item => {
                       if (item.requiresAuth && authStatus === 'guest') return null;
                       if (item.requiresOwner && isReadOnly) return null;
                       return (
-                          <button key={item.label} onClick={item.action} className="w-full flex items-center gap-4 p-4 text-left hover:bg-slate-50">
-                              <item.icon className="w-6 h-6 text-slate-500" />
-                              <span className="font-medium text-gray-800">{item.label}</span>
+                          <button key={item.label} onClick={item.action} className="w-full flex items-center gap-4 px-6 py-5 text-left hover:bg-blue-50 transition-colors group">
+                              <div className="p-2 bg-slate-100 rounded-lg text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                <item.icon className="w-6 h-6" />
+                              </div>
+                              <span className="font-bold text-slate-700">{item.label}</span>
                           </button>
                       );
                   })}
                    {authStatus !== 'idle' && (
-                      <button onClick={onLogout} className="w-full flex items-center gap-4 p-4 text-left hover:bg-slate-50 group">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-red-500 group-hover:text-red-600"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>
-                          <span className="font-medium text-red-600 group-hover:text-red-700">Logout</span>
+                      <button onClick={onLogout} className="w-full flex items-center gap-4 px-6 py-5 text-left hover:bg-red-50 transition-colors group border-t border-slate-100 mt-2">
+                          <div className="p-2 bg-red-50 rounded-lg text-red-500 group-hover:bg-red-600 group-hover:text-white transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>
+                          </div>
+                          <span className="font-bold text-red-600">Logout Session</span>
                       </button>
                    )}
               </div>
