@@ -1,8 +1,9 @@
 
 import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
-import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification } from '../types';
-import { useAuth, User } from './AuthContext';
+// Fix: Import User from '../types' where it is defined, instead of importing from AuthContext.tsx which only uses it.
+import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification, User } from '../types';
+import { useAuth } from './AuthContext';
 import { db } from '../firebaseConfig';
 
 // Declare the global firebase object

@@ -1,19 +1,13 @@
 
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react';
 import { auth, db } from '../firebaseConfig';
-import { DBOwner, Share } from '../types';
+import { DBOwner, Share, User } from '../types';
 
 // Declare the global firebase object provided by the scripts in index.html
 declare const firebase: any;
 
 type AuthStatus = 'idle' | 'guest' | 'authenticated' | 'loading' | 'selecting_db';
 export type ViewMode = 'own' | 'shared';
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-}
 
 interface AuthContextType {
   user: User | null;
@@ -25,6 +19,7 @@ interface AuthContextType {
   continueAsGuest: () => void;
   logout: () => void;
   selectDb: (owner: DBOwner) => void;
+  updateProfile: (profile: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -65,25 +60,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const safeEmail = email || '';
         const safeName = displayName || safeEmail.split('@')[0] || 'Google User';
         
+        let profileData = {};
+        if (db) {
+            try {
+                const doc = await db.collection('users').doc(uid).get();
+                if (doc.exists) {
+                    profileData = doc.data();
+                }
+            } catch (e) {
+                console.warn("Could not fetch user profile", e);
+            }
+        }
+
         const currentUser: User = { 
             id: uid, 
             name: safeName, 
-            email: safeEmail 
+            email: safeEmail,
+            ...profileData
         };
 
-        // CRITICAL FIX: Set user immediately so UI components have the profile info
         setUser(currentUser);
 
         if (db) {
             try {
-                // Sync user info to Firestore - if this fails due to rules, the catch block handles it
                 await db.collection('users').doc(uid).set({ 
                     name: safeName, 
                     email: safeEmail,
                     lastLogin: new Date().toISOString()
                 }, { merge: true });
                 
-                // Check for shares
                 const sharesSnap = await db.collection('shares').where('viewerId', '==', uid).get();
                 const shares: Share[] = sharesSnap.docs.map((doc: any) => doc.data());
                 
@@ -100,13 +105,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setAuthStatus('authenticated');
                 }
             } catch (e) {
-                console.warn("Firestore access denied. Check your Security Rules in Firebase Console.", e);
-                // Fallback: Proceed with authentication using auth info only
+                console.warn("Firestore access denied. Using basic auth info.", e);
                 setActiveDbOwner(currentUser);
                 setAuthStatus('authenticated');
             }
         } else {
-             // Fallback: No DB service available, use auth info only
              setActiveDbOwner(currentUser);
              setAuthStatus('authenticated');
         }
@@ -127,32 +130,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     if (!auth) {
-        alert("Google Sign-In is currently unavailable. Please check your internet connection and ensure Firebase is correctly configured.");
+        alert("Google Sign-In is currently unavailable.");
         return;
     }
-    
     setAuthStatus('loading');
-
     try {
         const provider = new firebase.auth.GoogleAuthProvider();
         provider.setCustomParameters({ prompt: 'select_account' });
-        
         await auth.signInWithPopup(provider);
-        
     } catch (error: any) {
-        console.error("Authentication failed:", error);
-        
         if (error.code === 'auth/popup-closed-by-user') {
             setAuthStatus('idle');
             return;
         }
-
-        if (error.code === 'auth/popup-blocked') {
-            alert("The sign-in popup was blocked by your browser. Please allow popups for this site or try again.");
-        } else {
-            alert(`Authentication failed: ${error.message}`);
-        }
-        
+        alert(`Authentication failed: ${error.message}`);
         setAuthStatus('idle');
     }
   };
@@ -180,6 +171,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setActiveDbOwner(owner);
       setAuthStatus('authenticated');
   };
+
+  const updateProfile = async (profile: Partial<User>) => {
+      if (!user || !db) return;
+      await db.collection('users').doc(user.id).set(profile, { merge: true });
+      setUser(prev => prev ? { ...prev, ...profile } : null);
+  };
   
   const value = useMemo(() => ({
     user,
@@ -191,6 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     continueAsGuest,
     logout,
     selectDb,
+    updateProfile,
   }), [user, authStatus, isReadOnly, activeDbOwner, sharedDbOwners]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

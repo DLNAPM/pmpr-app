@@ -99,3 +99,15 @@ export interface Notification {
   isAcknowledged: boolean;
   userId: string; // Same as senderId for ownership rules
 }
+
+export interface UserProfile {
+  companyName?: string;
+  companyAddress?: string;
+  phone?: string;
+}
+
+export interface User extends UserProfile {
+  id: string;
+  name: string;
+  email: string;
+}
