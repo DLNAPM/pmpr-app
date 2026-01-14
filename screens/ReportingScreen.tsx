@@ -152,17 +152,14 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         const { jsPDF } = jspdf;
         const doc = new jsPDF();
 
-        // BRANDING & COLORS
         const primaryBlue = [51, 102, 204];
         const slateGrey = [100, 116, 139];
 
-        // 1. HEADER LOGO & TITLE
         doc.setFontSize(28);
         doc.setTextColor(...primaryBlue);
         doc.setFont('helvetica', 'bold');
         doc.text('STATEMENT', 140, 25);
 
-        // Company Logo if exists
         if (user?.companyLogo) {
             try {
                 const logoData = user.companyLogo;
@@ -172,7 +169,6 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
             }
         }
 
-        // Company Info
         doc.setFontSize(14);
         doc.setTextColor(0, 0, 0);
         const startY = 25;
@@ -186,21 +182,18 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         });
         doc.text(`Phone: ${user?.companyPhone || '[Phone Not Provided]'}`, infoX, startY + 6 + (companyLines.length * 5));
 
-        // CALC STATEMENT DATE: Last Wednesday of the previous month
         let prevMonth = filters.reportMonth - 1;
         let prevYear = filters.reportYear;
         if (prevMonth === 0) {
             prevMonth = 12;
             prevYear -= 1;
         }
-        // Month param in Date(year, month, 0) is 1-indexed for the '0' shortcut to work as expected here
         const statementDateObj = new Date(prevYear, prevMonth, 0);
         while (statementDateObj.getDay() !== 3) {
             statementDateObj.setDate(statementDateObj.getDate() - 1);
         }
         const statementDateStr = statementDateObj.toLocaleDateString();
 
-        // Statement Info Box
         doc.setDrawColor(200);
         doc.rect(140, 35, 55, 14); 
         doc.line(140, 42, 195, 42); 
@@ -213,7 +206,6 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.text(statementDateStr, 170, 40);
         doc.text(selectedProperty.id.substring(0, 6).toUpperCase(), 170, 47);
 
-        // 2. BILL TO & PROPERTY DETAILS
         doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
         doc.text('Bill To:', 20, 65);
@@ -231,12 +223,10 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.text('Contract Period:', 110, 83);
         doc.text(`${new Date(selectedProperty.leaseStart).toLocaleDateString()} to ${new Date(selectedProperty.leaseEnd).toLocaleDateString()}`, 145, 83);
 
-        // 3. ACCOUNT ACTIVITY
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(12);
         doc.text('Account Activity', 20, 100);
 
-        // Calc Balance Forward (all previous history)
         const previousPayments = payments.filter(p => 
             p.propertyId === selectedProperty.id && 
             (p.year < filters.reportYear || (p.year === filters.reportYear && p.month < filters.reportMonth))
@@ -245,7 +235,6 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         const prevPaid = previousPayments.reduce((sum, p) => sum + p.rentPaidAmount + p.utilities.reduce((s, u) => s + u.paidAmount, 0), 0);
         const balanceForward = prevBilled - prevPaid;
 
-        // Transactions for selected month
         const currentMonthPayment = payments.find(p => p.propertyId === selectedProperty.id && p.year === filters.reportYear && p.month === filters.reportMonth);
         const tableRows: any[] = [];
         
@@ -307,7 +296,6 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.setFont('helvetica', 'bold');
         doc.text('TOTAL DUE', 135, finalY);
         
-        // Ensure "TOTAL DUE" is readable by correctly setting fill color before rectangle
         doc.setFillColor(235, 240, 250);
         doc.rect(160, finalY - 6, 35, 9, 'F');
         
@@ -315,7 +303,6 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.text('$', 162, finalY);
         doc.text(totalDue.toFixed(2), 193, finalY, { align: 'right' });
 
-        // 4. REMITTANCE SLIP
         const slipY = 240;
         doc.setLineDash([2, 2]);
         doc.setDrawColor(150);
