@@ -16,6 +16,7 @@ import ShareDataModal from './screens/ShareDataModal';
 import DatabaseSelectionScreen from './screens/DatabaseSelectionScreen';
 import { useAppContext } from './contexts/AppContext';
 import Modal from './components/Modal';
+import ProFeatureModal from './components/ProFeatureModal';
 
 export type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications' | 'account';
 export type ReportFilter = { 
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [proFeatureModal, setProFeatureModal] = useState<{isOpen: boolean, featureName: string}>({isOpen: false, featureName: ''});
   const [reportFilter, setReportFilter] = useState<ReportFilter | null>(null);
   const [action, setAction] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
@@ -87,7 +89,7 @@ const App: React.FC = () => {
     { id: 'repairs', label: 'Repairs', icon: WrenchScrewdriverIcon },
     { id: 'contractors', label: 'Contractors', icon: UsersIcon },
     { id: 'reporting', label: 'Reporting', icon: DocumentChartBarIcon },
-    { id: 'notifications', label: 'Notifications', icon: BellIcon, badge: unacknowledgedCount },
+    { id: 'notifications', label: 'Notifications', icon: BellIcon, badge: unacknowledgedCount, isPro: true },
   ];
 
   const mobileNavItems = [
@@ -98,6 +100,22 @@ const App: React.FC = () => {
     { id: 'account', label: 'Account', icon: UserCircleIcon, badge: unacknowledgedCount > 0 ? 'dot' : 0 },
   ];
   
+  const handleTabClick = (tabId: string, isPro?: boolean) => {
+    if (isPro && !user?.isPro) {
+      setProFeatureModal({ isOpen: true, featureName: 'Notifications' });
+      return;
+    }
+    setActiveTab(tabId as Tab);
+  };
+
+  const handleShareClick = () => {
+    if (!user?.isPro) {
+      setProFeatureModal({ isOpen: true, featureName: 'Share Data' });
+      return;
+    }
+    setIsShareModalOpen(true);
+  };
+
   if (authStatus === 'idle' || authStatus === 'loading') {
     return <LoginScreen />;
   }
@@ -125,11 +143,14 @@ const App: React.FC = () => {
             {desktopNavItems.map(item => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id as Tab)}
+                onClick={() => handleTabClick(item.id, item.isPro)}
                 className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors group ${activeTab === item.id ? 'bg-slate-900 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}
               >
                 <item.icon className={`mr-3 h-6 w-6 ${activeTab === item.id ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-300'}`} />
-                <span className="flex-1 text-left">{item.label}</span>
+                <span className="flex-1 text-left flex items-center gap-2">
+                  {item.label}
+                  {item.isPro && <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">PRO</span>}
+                </span>
                 {item.badge && item.badge > 0 && <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">{item.badge}</span>}
               </button>
             ))}
@@ -158,9 +179,12 @@ const App: React.FC = () => {
             
             <div className="mt-2 space-y-2">
                {!isReadOnly && user && (
-                   <button onClick={() => setIsShareModalOpen(true)} title="Share Your Properties (Read-Only)" className="w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-700 hover:text-white">
+                   <button onClick={handleShareClick} title="Share Your Properties (Read-Only)" className="w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-700 hover:text-white">
                       <ShareIcon className="w-5 h-5 mr-3"/>
-                      Share Data
+                      <span className="flex-1 text-left flex items-center gap-2">
+                        Share Data
+                        <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">PRO</span>
+                      </span>
                   </button>
                )}
                <button onClick={() => setIsHelpModalOpen(true)} className="w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-700 hover:text-white">
@@ -197,7 +221,7 @@ const App: React.FC = () => {
             {activeTab === 'contractors' && <ContractorsScreen />}
             {activeTab === 'reporting' && <ReportingScreen initialFilter={reportFilter} onFilterApplied={onFilterApplied} onEditItem={handleEditItem} />}
             {activeTab === 'notifications' && <NotificationsScreen />}
-            {activeTab === 'account' && <AccountScreen onNavigate={setActiveTab} onOpenShare={() => setIsShareModalOpen(true)} onOpenHelp={() => setIsHelpModalOpen(true)} onLogout={logout} />}
+            {activeTab === 'account' && <AccountScreen onNavigate={setActiveTab} onOpenShare={handleShareClick} onOpenHelp={() => setIsHelpModalOpen(true)} onLogout={logout} />}
           </div>
         </main>
       </div>
@@ -213,7 +237,7 @@ const App: React.FC = () => {
         {mobileNavItems.map(item => (
           <button
             key={item.id}
-            onClick={() => setActiveTab(item.id as Tab)}
+            onClick={() => handleTabClick(item.id)}
             className={`flex flex-col items-center justify-center p-2 w-full ${activeTab === item.id ? 'text-blue-400' : 'text-slate-400'}`}
           >
             <div className="relative">
@@ -229,6 +253,7 @@ const App: React.FC = () => {
     {/* Modals and Audio */}
     {isHelpModalOpen && <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />}
     {isShareModalOpen && <ShareDataModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />}
+    <ProFeatureModal isOpen={proFeatureModal.isOpen} onClose={() => setProFeatureModal({isOpen: false, featureName: ''})} featureName={proFeatureModal.featureName} />
     
     {/* Automatic Migration Modal for Cloud Users with Local Data */}
     {authStatus === 'authenticated' && !isReadOnly && hasGuestData && (

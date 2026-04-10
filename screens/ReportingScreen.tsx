@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import { ReportFilter, EditTarget } from '../App';
 import { MONTHS } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
+import ProFeatureModal from '../components/ProFeatureModal';
 
 // Declare jsPDF globally
 declare const jspdf: any;
@@ -61,6 +62,8 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         reportMonth: new Date().getMonth() + 1,
         reportYear: new Date().getFullYear()
     });
+
+    const [proFeatureModal, setProFeatureModal] = useState<{isOpen: boolean, featureName: string}>({isOpen: false, featureName: ''});
 
     useEffect(() => { 
         if (initialFilter) { 
@@ -141,6 +144,11 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     };
     
     const handleGenerateRentalStatement = () => {
+        if (!user?.isPro) {
+            setProFeatureModal({ isOpen: true, featureName: 'Monthly Statement (PDF)' });
+            return;
+        }
+
         if (filters.propertyId === 'all') {
             alert("Please select a specific Property to generate a statement.");
             return;
@@ -491,6 +499,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                     >
                         <CreditCardIcon className="w-5 h-5" />
                         Monthly Statement (PDF)
+                        <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ml-1">PRO</span>
                     </button>
                     <button onClick={handleReconcile} disabled={isReadOnly} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition-colors disabled:bg-gray-100">
                         <ShieldCheckIcon className="w-5 h-5 text-green-600" />
@@ -729,6 +738,8 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                     </div>
                 </Modal>
             )}
+            
+            <ProFeatureModal isOpen={proFeatureModal.isOpen} onClose={() => setProFeatureModal({isOpen: false, featureName: ''})} featureName={proFeatureModal.featureName} />
         </div>
     );
 };

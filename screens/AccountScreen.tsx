@@ -5,6 +5,7 @@ import { Tab } from '../App';
 import { UserCircleIcon, ShareIcon, QuestionMarkCircleIcon, UsersIcon, DocumentChartBarIcon, BellIcon, ArrowUpTrayIcon, CheckCircleIcon, BuildingOfficeIcon, TrashIcon, PlusIcon } from '../components/Icons';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
+import ProFeatureModal from '../components/ProFeatureModal';
 
 interface AccountScreenProps {
   onNavigate: (tab: Tab) => void;
@@ -23,6 +24,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
   const [companyLogo, setCompanyLogo] = useState(user?.companyLogo || '');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [proFeatureModal, setProFeatureModal] = useState<{isOpen: boolean, featureName: string}>({isOpen: false, featureName: ''});
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -30,6 +32,14 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
     if (!user) return 0;
     return notifications.filter(n => n.recipientEmail.toLowerCase() === user.email.toLowerCase() && !n.isAcknowledged).length;
   }, [notifications, user]);
+
+  const handleLogoUploadClick = () => {
+    if (!user?.isPro) {
+      setProFeatureModal({ isOpen: true, featureName: 'Upload Logo' });
+      return;
+    }
+    fileInputRef.current?.click();
+  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -68,11 +78,11 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
   const menuItems = [
     { label: 'Contractors', icon: UsersIcon, tab: 'contractors' as Tab, badge: 0 },
     { label: 'Reporting', icon: DocumentChartBarIcon, tab: 'reporting' as Tab, badge: 0 },
-    { label: 'Notifications', icon: BellIcon, tab: 'notifications' as Tab, badge: unacknowledgedCount },
+    { label: 'Notifications', icon: BellIcon, tab: 'notifications' as Tab, badge: unacknowledgedCount, isPro: true },
   ];
   
   const actionItems = [
-    { label: 'Share Data', icon: ShareIcon, action: onOpenShare, requiresAuth: true, requiresOwner: true },
+    { label: 'Share Data', icon: ShareIcon, action: onOpenShare, requiresAuth: true, requiresOwner: true, isPro: true },
     { label: 'Help', icon: QuestionMarkCircleIcon, action: onOpenHelp, requiresAuth: false, requiresOwner: false },
   ];
 
@@ -142,10 +152,11 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
                                         <div className="flex flex-col gap-2">
                                             <button 
                                                 type="button" 
-                                                onClick={() => fileInputRef.current?.click()}
-                                                className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 shadow-sm"
+                                                onClick={handleLogoUploadClick}
+                                                className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 shadow-sm flex items-center gap-2"
                                             >
                                                 Upload Logo
+                                                <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">PRO</span>
                                             </button>
                                             {companyLogo && (
                                                 <button 
@@ -251,12 +262,21 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Management tools</h4>
                   </div>
                   {menuItems.map(item => (
-                      <button key={item.tab} onClick={() => onNavigate(item.tab)} className="w-full flex justify-between items-center px-6 py-5 text-left hover:bg-blue-50 transition-colors group">
+                      <button key={item.tab} onClick={() => {
+                        if (item.isPro && !user?.isPro) {
+                          setProFeatureModal({ isOpen: true, featureName: item.label });
+                          return;
+                        }
+                        onNavigate(item.tab);
+                      }} className="w-full flex justify-between items-center px-6 py-5 text-left hover:bg-blue-50 transition-colors group">
                          <div className="flex items-center gap-4">
                               <div className="p-2 bg-slate-100 rounded-lg text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
                                 <item.icon className="w-6 h-6" />
                               </div>
-                              <span className="font-bold text-slate-700">{item.label}</span>
+                              <span className="font-bold text-slate-700 flex items-center gap-2">
+                                {item.label}
+                                {item.isPro && <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">PRO</span>}
+                              </span>
                          </div>
                          {item.badge > 0 && <span className="bg-red-500 text-white text-xs font-black rounded-full h-6 w-6 flex items-center justify-center shadow-lg shadow-red-200">{item.badge}</span>}
                       </button>
@@ -269,7 +289,10 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
                               <div className="p-2 bg-slate-100 rounded-lg text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
                                 <item.icon className="w-6 h-6" />
                               </div>
-                              <span className="font-bold text-slate-700">{item.label}</span>
+                              <span className="font-bold text-slate-700 flex items-center gap-2">
+                                {item.label}
+                                {item.isPro && <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">PRO</span>}
+                              </span>
                           </button>
                       );
                   })}
@@ -284,6 +307,7 @@ const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigate, onOpenShare, 
               </div>
           </div>
       </div>
+      <ProFeatureModal isOpen={proFeatureModal.isOpen} onClose={() => setProFeatureModal({isOpen: false, featureName: ''})} featureName={proFeatureModal.featureName} />
     </div>
   );
 };

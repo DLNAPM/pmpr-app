@@ -11,10 +11,12 @@ import {
   CheckCircleIcon 
 } from '../components/Icons';
 import HelpModal from '../components/HelpModal';
+import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 
 const LoginScreen: React.FC = () => {
   const { signInWithGoogle, continueAsGuest } = useAuth();
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-blue-100">
@@ -130,11 +132,20 @@ const LoginScreen: React.FC = () => {
                     <BuildingOfficeIcon className="w-5 h-5 text-slate-400" />
                     <span className="text-sm font-semibold text-slate-500">PMPR App</span>
                 </div>
-                <p className="text-slate-400 text-sm">© {new Date().getFullYear()} C&SH Group Properties, LLC. All rights reserved.</p>
+                <div className="flex items-center gap-4">
+                    <button 
+                        onClick={() => setIsPrivacyModalOpen(true)}
+                        className="text-sm text-slate-500 hover:text-blue-600 transition-colors"
+                    >
+                        Privacy Policy
+                    </button>
+                    <p className="text-slate-400 text-sm">© {new Date().getFullYear()} C&SH Group Properties, LLC. All rights reserved.</p>
+                </div>
             </div>
        </footer>
 
       <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
+      <PrivacyPolicyModal isOpen={isPrivacyModalOpen} onClose={() => setIsPrivacyModalOpen(false)} />
     </div>
   );
 };
