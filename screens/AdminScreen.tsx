@@ -97,6 +97,17 @@ const AdminScreen: React.FC = () => {
     }
   };
 
+  const handleToggleRole = async (userId: string, field: 'isPro' | 'isAdmin', currentValue: boolean) => {
+    if (!db) return;
+    try {
+      await db.collection('users').doc(userId).update({ [field]: !currentValue });
+      setUsers(users.map(u => u.id === userId ? { ...u, [field]: !currentValue } : u));
+    } catch (error) {
+      console.error(`Error updating ${field}:`, error);
+      setAlertMessage(`Failed to update user role.`);
+    }
+  };
+
   if (!user?.isAdmin) {
     return (
       <div className="p-8 text-center">
@@ -159,14 +170,19 @@ const AdminScreen: React.FC = () => {
                         <td className="py-3 px-4 text-sm font-medium text-slate-800">{u.email}</td>
                         <td className="py-3 px-4 text-sm text-slate-600">{u.name || 'N/A'}</td>
                         <td className="py-3 px-4 text-sm">
-                          {u.isPro ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">PRO</span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600">Basic</span>
-                          )}
-                          {u.isAdmin && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-800 ml-2">Admin</span>
-                          )}
+                          <button 
+                            onClick={() => handleToggleRole(u.id, 'isPro', !!u.isPro)}
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold mr-2 transition-colors ${u.isPro ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                          >
+                            {u.isPro ? 'PRO' : 'Basic'}
+                          </button>
+                          <button 
+                            onClick={() => handleToggleRole(u.id, 'isAdmin', !!u.isAdmin)}
+                            disabled={u.email.toLowerCase() === 'dlaniger.napm.consulting@gmail.com'}
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold transition-colors ${u.isAdmin ? 'bg-purple-100 text-purple-800 hover:bg-purple-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} disabled:opacity-50`}
+                          >
+                            {u.isAdmin ? 'Admin' : 'User'}
+                          </button>
                         </td>
                         <td className="py-3 px-4 text-right">
                           <button

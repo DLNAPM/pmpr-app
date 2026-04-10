@@ -72,12 +72,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
 
+        const isSuperAdmin = safeEmail.toLowerCase() === 'dlaniger.napm.consulting@gmail.com';
         const currentUser: User = { 
             id: uid, 
             name: safeName, 
             email: safeEmail,
             ...profileData,
-            isAdmin: safeEmail.toLowerCase() === 'dlaniger.napm.consulting@gmail.com' || (profileData as any).isAdmin
+            isAdmin: isSuperAdmin || (profileData as any).isAdmin,
+            isPro: isSuperAdmin || (profileData as any).isPro
         };
 
         setUser(currentUser);
