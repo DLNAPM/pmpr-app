@@ -8,7 +8,8 @@ import ReportingScreen from './screens/ReportingScreen';
 import ContractorsScreen from './screens/ContractorsScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import AccountScreen from './screens/AccountScreen';
-import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon, BellIcon, ArrowUpTrayIcon, ChevronDownIcon } from './components/Icons';
+import AdminScreen from './screens/AdminScreen';
+import { BuildingOfficeIcon, ChartPieIcon, CreditCardIcon, WrenchScrewdriverIcon, UserCircleIcon, DocumentChartBarIcon, QuestionMarkCircleIcon, UsersIcon, ShareIcon, BellIcon, ArrowUpTrayIcon, ChevronDownIcon, ShieldCheckIcon } from './components/Icons';
 import { useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import HelpModal from './components/HelpModal';
@@ -18,7 +19,7 @@ import { useAppContext } from './contexts/AppContext';
 import Modal from './components/Modal';
 import ProFeatureModal from './components/ProFeatureModal';
 
-export type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications' | 'account';
+export type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications' | 'account' | 'admin';
 export type ReportFilter = { 
   status?: 'all' | 'collected' | 'outstanding';
   repairStatus?: 'all' | 'open' | 'completed';
@@ -90,6 +91,7 @@ const App: React.FC = () => {
     { id: 'contractors', label: 'Contractors', icon: UsersIcon },
     { id: 'reporting', label: 'Reporting', icon: DocumentChartBarIcon },
     { id: 'notifications', label: 'Notifications', icon: BellIcon, badge: unacknowledgedCount, isPro: true },
+    ...(user?.isAdmin ? [{ id: 'admin', label: 'Admin', icon: ShieldCheckIcon }] : []),
   ];
 
   const mobileNavItems = [
@@ -98,6 +100,7 @@ const App: React.FC = () => {
     { id: 'payments', label: 'Payments', icon: CreditCardIcon },
     { id: 'repairs', label: 'Repairs', icon: WrenchScrewdriverIcon },
     { id: 'account', label: 'Account', icon: UserCircleIcon, badge: unacknowledgedCount > 0 ? 'dot' : 0 },
+    ...(user?.isAdmin ? [{ id: 'admin', label: 'Admin', icon: ShieldCheckIcon }] : []),
   ];
   
   const handleTabClick = (tabId: string, isPro?: boolean) => {
@@ -222,6 +225,7 @@ const App: React.FC = () => {
             {activeTab === 'reporting' && <ReportingScreen initialFilter={reportFilter} onFilterApplied={onFilterApplied} onEditItem={handleEditItem} />}
             {activeTab === 'notifications' && <NotificationsScreen />}
             {activeTab === 'account' && <AccountScreen onNavigate={setActiveTab} onOpenShare={handleShareClick} onOpenHelp={() => setIsHelpModalOpen(true)} onLogout={logout} />}
+            {activeTab === 'admin' && <AdminScreen />}
           </div>
         </main>
       </div>

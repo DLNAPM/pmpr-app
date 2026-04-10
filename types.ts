@@ -106,6 +106,7 @@ export interface UserProfile {
   companyPhone?: string;
   companyLogo?: string; // Base64 image string
   isPro?: boolean;
+  isAdmin?: boolean;
 }
 
 export interface User extends UserProfile {

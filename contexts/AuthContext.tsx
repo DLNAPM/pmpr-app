@@ -76,7 +76,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: uid, 
             name: safeName, 
             email: safeEmail,
-            ...profileData
+            ...profileData,
+            isAdmin: safeEmail.toLowerCase() === 'dlaniger.napm.consulting@gmail.com' || (profileData as any).isAdmin
         };
 
         setUser(currentUser);
