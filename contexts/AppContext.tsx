@@ -153,17 +153,44 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
         // Safety timeout to avoid infinite spinner if Firestore is slow or rules are misconfigured
         const timeout = setTimeout(() => setIsLoading(false), 3000);
 
-        const targetUserId = isReadOnly ? activeDbOwner.id : user.id;
+        const fetchData = async () => {
+            // Fetch notifications (sent or received)
+            unsubs.push(db.collection('notifications').where('recipientEmail', '==', user.email.toLowerCase()).onSnapshot(s => setNotifications(prev => [...prev.filter(n => n.recipientEmail !== user.email), ...s.docs.map(d => ({id: d.id, ...d.data()}))])));
+            unsubs.push(db.collection('notifications').where('senderId', '==', user.id).onSnapshot(s => setNotifications(prev => [...prev.filter(n => n.senderId !== user.id), ...s.docs.map(d => ({id: d.id, ...d.data()}))])));
 
-        // Fetch primary collections
-        unsubs.push(db.collection('properties').where('userId', '==', targetUserId).onSnapshot(s => { setProperties(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
-        unsubs.push(db.collection('payments').where('userId', '==', targetUserId).onSnapshot(s => { setPayments(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
-        unsubs.push(db.collection('repairs').where('userId', '==', targetUserId).onSnapshot(s => { setRepairs(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
-        unsubs.push(db.collection('contractors').where('userId', '==', targetUserId).onSnapshot(s => { setContractors(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+            if (isReadOnly) {
+                try {
+                    const sharesSnap = await db.collection('shares').where('ownerId', '==', activeDbOwner.id).where('viewerId', '==', user.id).get();
+                    const sharedPropertyIds = sharesSnap.docs.map((doc: any) => doc.data().propertyId);
+                    
+                    if (sharedPropertyIds.length > 0) {
+                        // Handle max length of 10 for 'in' queries safely
+                        const idsToQuery = sharedPropertyIds.slice(0, 10);
+                        unsubs.push(db.collection('properties').where(firebase.firestore.FieldPath.documentId(), 'in', idsToQuery).onSnapshot(s => { setProperties(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                        unsubs.push(db.collection('payments').where('propertyId', 'in', idsToQuery).onSnapshot(s => { setPayments(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                        unsubs.push(db.collection('repairs').where('propertyId', 'in', idsToQuery).onSnapshot(s => { setRepairs(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                        
+                        // Contractors don't have propertyId, they might fail read so we just set empty for now
+                        setContractors([]);
+                        markLoaded();
+                    } else {
+                        collectionsLoaded += 4;
+                        setIsLoading(false);
+                    }
+                } catch (e) {
+                    console.error("Error fetching shared data:", e);
+                    collectionsLoaded += 4;
+                    setIsLoading(false);
+                }
+            } else {
+                unsubs.push(db.collection('properties').where('userId', '==', user.id).onSnapshot(s => { setProperties(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                unsubs.push(db.collection('payments').where('userId', '==', user.id).onSnapshot(s => { setPayments(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                unsubs.push(db.collection('repairs').where('userId', '==', user.id).onSnapshot(s => { setRepairs(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                unsubs.push(db.collection('contractors').where('userId', '==', user.id).onSnapshot(s => { setContractors(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+            }
+        };
 
-        // Fetch notifications (sent or received)
-        unsubs.push(db.collection('notifications').where('recipientEmail', '==', user.email.toLowerCase()).onSnapshot(s => setNotifications(prev => [...prev.filter(n => n.recipientEmail !== user.email), ...s.docs.map(d => ({id: d.id, ...d.data()}))])));
-        unsubs.push(db.collection('notifications').where('senderId', '==', user.id).onSnapshot(s => setNotifications(prev => [...prev.filter(n => n.senderId !== user.id), ...s.docs.map(d => ({id: d.id, ...d.data()}))])));
+        fetchData();
 
         return () => {
             clearTimeout(timeout);
