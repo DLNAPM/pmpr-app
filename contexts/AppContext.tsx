@@ -58,6 +58,7 @@ interface AppContextType {
   findUserByEmail: (email: string) => Promise<User | null>;
   addShare: (shareData: Omit<Share, 'id'>) => Promise<void>;
   deleteShare: (shareId: string) => Promise<void>;
+  renewLease: (propertyId: string, durationMonths: number, newRentAmount?: number) => Promise<void>;
   migrateGuestData: () => Promise<void>;
   hasGuestData: boolean;
   clearGuestData: () => void;
@@ -105,7 +106,21 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
     const updateNotification = (id: string, updates: Partial<Notification>) => setNotifications(current => current.map(n => n.id === id ? { ...n, ...updates } : n));
     const deleteNotification = (id: string) => setNotifications(current => current.filter(n => n.id !== id));
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, migrateGuestData: async () => {}, hasGuestData: properties.length > 0, clearGuestData: () => {}, isMigrating: false, isUserPropertyOwner: async () => true }), [properties, payments, repairs, contractors, notifications]);
+    const renewLease = async (propertyId: string, durationMonths: number, newRentAmount?: number) => {
+        setProperties(cur => cur.map(p => {
+            if (p.id === propertyId) {
+                const currentEnd = new Date(p.leaseEnd);
+                const newStart = new Date(currentEnd);
+                newStart.setDate(newStart.getDate() + 1);
+                const newEnd = new Date(newStart);
+                newEnd.setMonth(newEnd.getMonth() + durationMonths);
+                return { ...p, leaseStart: newStart.toISOString(), leaseEnd: newEnd.toISOString(), rentAmount: newRentAmount !== undefined ? newRentAmount : p.rentAmount };
+            }
+            return p;
+        }));
+    };
+
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, renewLease, migrateGuestData: async () => {}, hasGuestData: properties.length > 0, clearGuestData: () => {}, isMigrating: false, isUserPropertyOwner: async () => true }), [properties, payments, repairs, contractors, notifications]);
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
 
@@ -287,7 +302,27 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const updateNotification = (id: string, updates: any) => db.collection('notifications').doc(id).update(sanitizeData(updates));
     const deleteNotification = (id: string) => db.collection('notifications').doc(id).delete();
 
-    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner: async () => { const snap = await db.collection('shares').where('ownerId', '==', user.id).get(); return snap.docs.map((d: any) => ({ id: d.id, ...d.data() })); }, findUserByEmail: async (email: string) => { const snap = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get(); return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as User; }, addShare: async (s: any) => { await db.collection('shares').doc(`${s.propertyId}_${s.viewerId}`).set(s); }, deleteShare: async (id: string) => { await db.collection('shares').doc(id).delete(); }, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user?.id, isReadOnly, hasGuestData, isMigrating, isLoading]);
+    const renewLease = async (propertyId: string, durationMonths: number, newRentAmount?: number) => {
+        if (isReadOnly) return;
+        const p = properties.find(prop => prop.id === propertyId);
+        if (!p) return;
+        
+        // Start from day after previous lease end
+        const currentEnd = new Date(p.leaseEnd);
+        const newStart = new Date(currentEnd);
+        newStart.setDate(newStart.getDate() + 1);
+        
+        const newEnd = new Date(newStart);
+        newEnd.setMonth(newEnd.getMonth() + durationMonths);
+        
+        await db.collection('properties').doc(propertyId).update(sanitizeData({
+            leaseStart: newStart.toISOString(),
+            leaseEnd: newEnd.toISOString(),
+            rentAmount: newRentAmount !== undefined ? newRentAmount : p.rentAmount
+        }));
+    };
+
+    const value = useMemo(() => ({ properties, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner: async () => { const snap = await db.collection('shares').where('ownerId', '==', user.id).get(); return snap.docs.map((d: any) => ({ id: d.id, ...d.data() })); }, findUserByEmail: async (email: string) => { const snap = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get(); return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as User; }, addShare: async (s: any) => { await db.collection('shares').doc(`${s.propertyId}_${s.viewerId}`).set(s); }, deleteShare: async (id: string) => { await db.collection('shares').doc(id).delete(); }, renewLease, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, payments, repairs, contractors, notifications, user?.id, isReadOnly, hasGuestData, isMigrating, isLoading]);
     
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };

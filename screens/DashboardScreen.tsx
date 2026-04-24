@@ -3,10 +3,11 @@ import React, { useMemo, useState, useEffect } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import ProgressBar from '../components/ProgressBar';
 import { useAppContext } from '../contexts/AppContext';
-import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon, CurrencyDollarIcon, ArrowTopRightOnSquareIcon } from '../components/Icons';
-import { RepairStatus } from '../types';
+import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon, CurrencyDollarIcon, ArrowTopRightOnSquareIcon, ExclamationTriangleIcon, CalendarIcon } from '../components/Icons';
+import { RepairStatus, Property } from '../types';
 import { ReportFilter } from '../App';
 import { MONTHS } from '../constants';
+import LeaseRenewalModal from '../components/LeaseRenewalModal';
 
 interface DashboardScreenProps {
   onAction: (tab: 'properties' | 'payments' | 'repairs' | 'reporting' | 'contractors', action?: string) => void;
@@ -28,7 +29,25 @@ const getFakeRedfinValue = (propertyId: string) => {
 
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateToReport }) => {
-    const { properties, payments, repairs, getSiteHealthScore } = useAppContext();
+    const { properties, payments, repairs, getSiteHealthScore, renewLease } = useAppContext();
+
+    const [selectedRenewalProperty, setSelectedRenewalProperty] = useState<Property | null>(null);
+
+    const expiredLeases = useMemo(() => {
+        const now = new Date();
+        return properties.filter(p => p.leaseEnd && new Date(p.leaseEnd) < now);
+    }, [properties]);
+
+    const expiringSoonLeases = useMemo(() => {
+        const now = new Date();
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        return properties.filter(p => {
+            if (!p.leaseEnd) return false;
+            const end = new Date(p.leaseEnd);
+            return end >= now && end <= thirtyDaysFromNow;
+        });
+    }, [properties]);
 
     // New state for the dynamic breakdown
     const [selectedBreakdownPropertyId, setSelectedBreakdownPropertyId] = useState<string | null>(properties.length > 0 ? properties[0].id : null);
@@ -207,6 +226,49 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-2 space-y-6">
+                {(expiredLeases.length > 0 || expiringSoonLeases.length > 0) && (
+                    <Card className="border-red-100 bg-red-50/30">
+                        <CardHeader>
+                            <div className="flex items-center gap-2 text-red-700">
+                                <ExclamationTriangleIcon className="w-5 h-5" />
+                                <h3 className="font-semibold text-lg">Lease Alerts</h3>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {expiredLeases.map(p => (
+                                    <div key={p.id} className="flex justify-between items-center p-3 bg-white border border-red-200 rounded-lg shadow-sm">
+                                        <div>
+                                            <p className="font-semibold text-red-900">{p.name}</p>
+                                            <p className="text-sm text-red-700">Lease ended on {new Date(p.leaseEnd).toLocaleDateString()}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setSelectedRenewalProperty(p)}
+                                            className="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 transition-colors shadow-sm"
+                                        >
+                                            Renew Now
+                                        </button>
+                                    </div>
+                                ))}
+                                {expiringSoonLeases.map(p => (
+                                    <div key={p.id} className="flex justify-between items-center p-3 bg-white border border-yellow-200 rounded-lg shadow-sm">
+                                        <div>
+                                            <p className="font-semibold text-gray-900">{p.name}</p>
+                                            <p className="text-sm text-gray-600">Lease expiring on {new Date(p.leaseEnd).toLocaleDateString()}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setSelectedRenewalProperty(p)}
+                                            className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm"
+                                        >
+                                            Renew
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
                 <Card>
                     <CardHeader><h3 className="font-semibold text-lg">Quick Actions</h3></CardHeader>
                     <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -332,7 +394,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
                                     return (
                                         <li key={prop.id} className="flex items-start justify-between">
                                             <div className="flex-1 pr-4">
-                                                <p className="font-medium">{index + 1}. {prop.name}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-medium">{index + 1}. {prop.name}</p>
+                                                    {prop.leaseEnd && new Date(prop.leaseEnd) < new Date() && (
+                                                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-[10px] font-bold text-red-700 rounded uppercase">
+                                                            Lease Ended
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <a
                                                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(prop.address)}`}
                                                   target="_blank"
@@ -369,6 +438,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
                     </CardContent>
                 </Card>
             </div>
+
+            {selectedRenewalProperty && (
+                <LeaseRenewalModal
+                    isOpen={!!selectedRenewalProperty}
+                    onClose={() => setSelectedRenewalProperty(null)}
+                    property={selectedRenewalProperty}
+                    onRenew={renewLease}
+                />
+            )}
         </div>
     );
 };
