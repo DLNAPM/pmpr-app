@@ -333,7 +333,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
         doc.text(`Payment Report: ${selectedProperty.name}`, 14, 22);
         doc.setFontSize(11);
         doc.setTextColor(100);
-        doc.text(`Report Generated: ${new Date().toLocaleDateString()}`, 14, 30);
+        doc.text(`Report Generated: ${formatDate(new Date().toISOString())}`, 14, 30);
 
         const tableColumn = ["Month", "Category", "Bill Amt", "Paid Amt", "Balance", "Notes"];
         const tableRows: any[] = [];
@@ -399,6 +399,13 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     const isOwner = selectedProperty && !selectedProperty.ownerInfo; 
     const canEdit = !isReadOnly && isOwner;
 
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'N/A';
+        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+        const [year, month, day] = cleanDate.split('-').map(Number);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
+        return new Date(year, month - 1, day).toLocaleDateString();
+    };
 
     return (
         <div>

@@ -462,7 +462,11 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
             if (!p) return;
             
             // Start from day after previous lease end
-            const currentEnd = new Date(p.leaseEnd);
+            // Use robust parsing to avoid "day before" offsets
+            const cleanDate = p.leaseEnd.includes('T') ? p.leaseEnd.split('T')[0] : p.leaseEnd;
+            const [y, m, d] = cleanDate.split('-').map(Number);
+            const currentEnd = new Date(y, m - 1, d);
+            
             const newStart = new Date(currentEnd);
             newStart.setDate(newStart.getDate() + 1);
             
@@ -493,7 +497,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                 status: 'active'
             }));
 
-            // Set previous leases to historic
+            // Set previous leases to historic using a more robust query for the batch
             const previousLeases = await db.collection('leases')
                 .where('propertyId', '==', propertyId)
                 .where('userId', '==', user.id)
@@ -501,7 +505,9 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                 .get();
                 
             previousLeases.forEach((doc: any) => {
-                batch.update(doc.ref, { status: 'historic' });
+                if (doc.id !== leaseRef.id) {
+                    batch.update(doc.ref, { status: 'historic' });
+                }
             });
             
             await batch.commit();

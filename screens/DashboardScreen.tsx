@@ -199,6 +199,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
 
     const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
     
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'N/A';
+        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+        const [year, month, day] = cleanDate.split('-').map(Number);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
+        return new Date(year, month - 1, day).toLocaleDateString();
+    };
+
     const getHealthColor = (score: number) => {
         if (score >= 85) return 'text-green-600';
         if (score >= 60) return 'text-yellow-600';
@@ -240,7 +248,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
                                     <div key={p.id} className="flex justify-between items-center p-3 bg-white border border-red-200 rounded-lg shadow-sm">
                                         <div>
                                             <p className="font-semibold text-red-900">{p.name}</p>
-                                            <p className="text-sm text-red-700">Lease ended on {new Date(p.leaseEnd).toLocaleDateString()}</p>
+                                            <p className="text-sm text-red-700">Lease ended on {formatDate(p.leaseEnd)}</p>
                                         </div>
                                         <button
                                             onClick={() => setSelectedRenewalProperty(p)}
@@ -254,7 +262,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
                                     <div key={p.id} className="flex justify-between items-center p-3 bg-white border border-yellow-200 rounded-lg shadow-sm">
                                         <div>
                                             <p className="font-semibold text-gray-900">{p.name}</p>
-                                            <p className="text-sm text-gray-600">Lease expiring on {new Date(p.leaseEnd).toLocaleDateString()}</p>
+                                            <p className="text-sm text-gray-600">Lease expiring on {formatDate(p.leaseEnd)}</p>
                                         </div>
                                         <button
                                             onClick={() => setSelectedRenewalProperty(p)}

@@ -157,6 +157,15 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
     };
 
     const getStatusColor = (status: RepairStatus) => { switch (status) { case RepairStatus.COMPLETE: return 'bg-green-100 text-green-800'; case RepairStatus.IN_PROGRESS: return 'bg-blue-100 text-blue-800'; case RepairStatus.PENDING_SUPPLY: return 'bg-yellow-100 text-yellow-800'; case RepairStatus.PENDING_REPAIRMEN: return 'bg-red-100 text-red-800'; default: return 'bg-gray-100 text-gray-800'; } };
+
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'N/A';
+        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+        const [year, month, day] = cleanDate.split('-').map(Number);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
+        return new Date(year, month - 1, day).toLocaleDateString();
+    };
+
     const sortedRepairs = useMemo(() => [...repairs].sort((a,b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime()), [repairs]);
 
     return (
@@ -180,8 +189,8 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
                                         <p className="mt-1">{repair.description}</p>
                                         {repair.contractorId && <p className="text-sm text-gray-600 mt-1">Contractor: {getContractorById(repair.contractorId)?.name || 'N/A'}</p>}
                                         <div className="text-xs text-gray-500 mt-2 space-x-4">
-                                          <span>Requested: {new Date(repair.requestDate).toLocaleDateString()}</span>
-                                          {repair.repairDate && <span>Repaired: {new Date(repair.repairDate).toLocaleDateString()}</span>}
+                                          <span>Requested: {formatDate(repair.requestDate)}</span>
+                                          {repair.repairDate && <span>Repaired: {formatDate(repair.repairDate)}</span>}
                                         </div>
                                     </div>
                                     <div className="flex-shrink-0 text-right">

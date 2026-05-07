@@ -54,6 +54,16 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
         return leaseTemplates.find(t => t.id === selectedTemplateId)?.content || DEFAULT_TEMPLATE;
     }, [selectedTemplateId, leaseTemplates]);
 
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'N/A';
+        // If it's a T-separated ISO string, take only the date part
+        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+        const [year, month, day] = cleanDate.split('-').map(Number);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
+        // Constructing date with year, monthIndex, day works in local time
+        return new Date(year, month - 1, day).toLocaleDateString();
+    };
+
     const populatedLease = useMemo(() => {
         const tenantNames = lease.tenants.length > 0 ? lease.tenants.map(t => t.name).join(', ') : 'N/A';
         const landlordName = user?.companyName || user?.name || 'Owner';
@@ -63,8 +73,8 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
         content = content.replace(/\{\{TENANT_NAMES\}\}/g, tenantNames);
         content = content.replace(/\{\{PROPERTY_NAME\}\}/g, property.name);
         content = content.replace(/\{\{PROPERTY_ADDRESS\}\}/g, property.address);
-        content = content.replace(/\{\{LEASE_START\}\}/g, new Date(lease.leaseStart).toLocaleDateString());
-        content = content.replace(/\{\{LEASE_END\}\}/g, new Date(lease.leaseEnd).toLocaleDateString());
+        content = content.replace(/\{\{LEASE_START\}\}/g, formatDate(lease.leaseStart));
+        content = content.replace(/\{\{LEASE_END\}\}/g, formatDate(lease.leaseEnd));
         content = content.replace(/\{\{RENT_AMOUNT\}\}/g, lease.rentAmount.toString());
         content = content.replace(/\{\{SECURITY_DEPOSIT\}\}/g, property.securityDeposit.toString());
         
@@ -90,9 +100,9 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
             try {
                 // Determine format
                 const format = user.companyLogo.includes('png') ? 'PNG' : 'JPEG';
-                const logoSize = 18; // Smaller
+                const logoSize = 15; // Even smaller for real estate purposes
                 doc.addImage(user.companyLogo, format, pageWidth - margin - logoSize, cursorY, logoSize, logoSize);
-                cursorY += logoSize + 10; // Move cursor down after logo
+                cursorY += logoSize + 5; // Move cursor down after logo, smaller gap
             } catch (error) {
                 console.error("Error adding logo to PDF:", error);
             }
@@ -305,8 +315,8 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
                                 >
                                     <div className="max-w-2xl mx-auto shadow-2xl bg-white p-12 min-h-full font-serif text-sm leading-loose text-slate-900 border border-gray-100 ring-1 ring-black/5">
                                         {user?.companyLogo && (
-                                            <div className="flex justify-end mb-6">
-                                                <img src={user.companyLogo} className="w-20 h-20 object-contain" alt="Company Logo" />
+                                            <div className="flex justify-end mb-4">
+                                                <img src={user.companyLogo} className="w-16 h-16 object-contain" alt="Company Logo" />
                                             </div>
                                         )}
                                         {!user?.companyLogo && user?.companyName && (

@@ -87,9 +87,9 @@ service cloud.firestore {
 
     // Notifications
     match /notifications/{notificationId} {
-      allow read: if isSignedIn() && (isOwner(existing()) || (existing().recipientEmail.lower() == request.auth.token.email.lower()));
+      allow read: if isSignedIn() && (isOwner(existing()) || (existing().recipientEmail.toLower() == request.auth.token.email.toLower()));
       allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && (isOwner(existing()) || (existing().recipientEmail.lower() == request.auth.token.email.lower()));
+      allow update: if isSignedIn() && (isOwner(existing()) || (existing().recipientEmail.toLower() == request.auth.token.email.toLower()));
       allow delete: if isSignedIn() && isOwner(existing());
     }
 

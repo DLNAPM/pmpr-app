@@ -140,6 +140,14 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
     const { leases, payments, properties, addLease, updateLease, deleteLease, updateProperty } = useAppContext();
     const { isReadOnly } = useAuth();
     
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'N/A';
+        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+        const [year, month, day] = cleanDate.split('-').map(Number);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
+        return new Date(year, month - 1, day).toLocaleDateString();
+    };
+
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingLease, setEditingLease] = useState<Lease | undefined>(undefined);
 
@@ -270,7 +278,7 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
                                         <h4 className="font-bold text-slate-800">
-                                            {new Date(lease.leaseStart).toLocaleDateString()} - {new Date(lease.leaseEnd).toLocaleDateString()}
+                                            {formatDate(lease.leaseStart)} - {formatDate(lease.leaseEnd)}
                                         </h4>
                                         {isCurrent && (
                                             <span className="px-1.5 py-0.5 bg-blue-600 text-[10px] text-white font-bold rounded uppercase tracking-wider">Current</span>
@@ -622,7 +630,7 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                 )}
                              </div>
                              <div className="text-xs font-medium text-slate-500">
-                                Expires: {new Date(prop.leaseEnd).toLocaleDateString()}
+                                Expires: {formatDate(prop.leaseEnd)}
                              </div>
                          </CardFooter>
                     </Card>

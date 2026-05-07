@@ -104,6 +104,14 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     const [selections, setSelections] = useState<Record<string, string>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return 'N/A';
+        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+        const [year, month, day] = cleanDate.split('-').map(Number);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
+        return new Date(year, month - 1, day).toLocaleDateString();
+    };
+
     const tenants = useMemo(() => properties.flatMap(p => p.tenants.map(t => ({...t, propertyName: p.name, propertyId: p.id}))), [properties]);
     
     const [activeTab, setActiveTab] = useState<'transactions' | 'leases'>('transactions');
@@ -268,7 +276,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.setFont('helvetica', 'bold');
         doc.text('Lease Period:', 25, 68);
         doc.setFont('helvetica', 'normal');
-        doc.text(`${new Date(lease.leaseStart).toLocaleDateString()} to ${new Date(lease.leaseEnd).toLocaleDateString()}`, 55, 68);
+        doc.text(`${formatDate(lease.leaseStart)} to ${formatDate(lease.leaseEnd)}`, 55, 68);
 
         doc.setFont('helvetica', 'bold');
         doc.text('Monthly Rent:', 110, 68);
@@ -329,7 +337,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         });
 
         leaseRepairs.forEach(r => {
-            detailRows.push([new Date(r.requestDate).toLocaleDateString(), `Repair: ${r.description.substring(0, 30)}`, r.cost.toFixed(2), '-']);
+            detailRows.push([formatDate(r.requestDate), `Repair: ${r.description.substring(0, 30)}`, r.cost.toFixed(2), '-']);
         });
 
         doc.setFontSize(14);
@@ -358,7 +366,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
     const handleExport = () => { 
         const headers = ['Date', 'Property Name', 'Type', 'Category', 'Bill Amount', 'Paid Amount', 'Balance']; 
-        const rows = reportData.map(item => [ new Date(item.date).toLocaleDateString(), `"${item.propertyName.replace(/"/g, '""')}"`, item.type, item.category, item.billAmount, item.paidAmount, item.balance ].join(',')); 
+        const rows = reportData.map(item => [ formatDate(item.date), `"${item.propertyName.replace(/"/g, '""')}"`, item.type, item.category, item.billAmount, item.paidAmount, item.balance ].join(',')); 
         const csvContent = [headers.join(','), ...rows].join('\n'); 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); 
         const link = document.createElement('a'); 
@@ -468,8 +476,8 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.text(selectedProperty.address, 130, 71);
         doc.text('Contract Period:', 110, 83);
 
-        const periodStart = activeLease ? new Date(activeLease.leaseStart).toLocaleDateString() : new Date(selectedProperty.leaseStart).toLocaleDateString();
-        const periodEnd = activeLease ? new Date(activeLease.leaseEnd).toLocaleDateString() : new Date(selectedProperty.leaseEnd).toLocaleDateString();
+        const periodStart = activeLease ? formatDate(activeLease.leaseStart) : formatDate(selectedProperty.leaseStart);
+        const periodEnd = activeLease ? formatDate(activeLease.leaseEnd) : formatDate(selectedProperty.leaseEnd);
         doc.text(`${periodStart} to ${periodEnd}`, 145, 83);
 
         doc.setFont('helvetica', 'bold');
@@ -509,7 +517,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
             const totalPaid = currentMonthPayment.rentPaidAmount + currentMonthPayment.utilities.reduce((s, u) => s + u.paidAmount, 0);
             if (totalPaid > 0) {
                 tableRows.push([
-                    currentMonthPayment.paymentDate ? new Date(currentMonthPayment.paymentDate).toLocaleDateString() : '',
+                    currentMonthPayment.paymentDate ? formatDate(currentMonthPayment.paymentDate) : '',
                     'PMT-RCVD',
                     'Payment Received - Thank You',
                     `-${totalPaid.toFixed(2)}`
@@ -688,9 +696,9 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
         const repairGroups = (Object.values(
             repairs.reduce((acc: Record<string, Repair[]>, r) => {
-                const key = `${r.propertyId}-${r.description}-${r.cost}-${new Date(
+                const key = `${r.propertyId}-${r.description}-${r.cost}-${formatDate(
                     r.requestDate
-                ).toLocaleDateString()}`;
+                )}`;
                 if (!acc[key]) acc[key] = [];
                 acc[key].push(r);
                 return acc;
@@ -783,7 +791,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                                         <option value="all">Custom Date Range or All</option>
                                         {propertyLeases.map(l => (
                                             <option key={l.id} value={l.id}>
-                                                {new Date(l.leaseStart).toLocaleDateString()} to {new Date(l.leaseEnd).toLocaleDateString()} (${l.rentAmount}/mo)
+                                                {formatDate(l.leaseStart)} to {formatDate(l.leaseEnd)} (${l.rentAmount}/mo)
                                             </option>
                                         ))}
                                     </select>
@@ -874,7 +882,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                             <tbody className="divide-y divide-gray-100">
                                 {reportData.map((item, idx) => (
                                     <tr key={`${item.originalId}-${idx}`} className="hover:bg-blue-50/50 transition-colors text-sm group">
-                                        <td className="p-4 whitespace-nowrap text-slate-500">{new Date(item.date).toLocaleDateString()}</td>
+                                        <td className="p-4 whitespace-nowrap text-slate-500">{formatDate(item.date)}</td>
                                         <td className="p-4">
                                             <p className="font-bold text-slate-800">{item.propertyName}</p>
                                             <p className="text-xs text-slate-500">{item.tenantName}</p>
@@ -948,7 +956,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                                         <tr key={lease.id} className="hover:bg-blue-50/50 transition-colors text-sm">
                                             <td className="p-4 whitespace-nowrap">
                                                 <p className="font-bold text-slate-800">
-                                                    {new Date(lease.leaseStart).toLocaleDateString()} - {new Date(lease.leaseEnd).toLocaleDateString()}
+                                                    {formatDate(lease.leaseStart)} - {formatDate(lease.leaseEnd)}
                                                 </p>
                                             </td>
                                             <td className="p-4 font-medium text-slate-700">{prop?.name || 'Unknown'}</td>
