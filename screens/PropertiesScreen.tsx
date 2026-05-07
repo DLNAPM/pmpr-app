@@ -286,9 +286,22 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
                                     <button 
                                         onClick={() => onGenerate(lease)}
                                         className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 text-blue-600 rounded text-[10px] font-bold hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                        title="Generate Lease Agreement"
                                     >
                                         <DocumentTextIcon className="w-3 h-3" />
-                                        Generate
+                                        Lease Doc
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            // Trigger navigation to reporting tab with this lease filtered
+                                            window.location.hash = `reporting?propertyId=${propertyId}&leaseId=${lease.id}`;
+                                            window.dispatchEvent(new HashChangeEvent('hashchange'));
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-indigo-600 rounded text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                                        title="View Financial Report for this Period"
+                                    >
+                                        <ClockIcon className="w-3 h-3" />
+                                        Report
                                     </button>
                                 </div>
                             </div>

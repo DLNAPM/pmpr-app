@@ -21,8 +21,11 @@ import ProFeatureModal from './components/ProFeatureModal';
 
 export type Tab = 'dashboard' | 'properties' | 'payments' | 'repairs' | 'contractors' | 'reporting' | 'notifications' | 'account' | 'admin';
 export type ReportFilter = { 
-  status?: 'all' | 'collected' | 'outstanding';
-  repairStatus?: 'all' | 'open' | 'completed';
+    propertyId?: string;
+    leaseId?: string;
+    tenantId?: string;
+    status?: 'all' | 'collected' | 'outstanding';
+    repairStatus?: 'all' | 'open' | 'completed';
 };
 export type EditTarget = { type: 'payment' | 'repair', id: string };
 
@@ -73,6 +76,33 @@ const App: React.FC = () => {
     setReportFilter(null);
   }, []);
   
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#reporting')) {
+        const params = new URLSearchParams(hash.split('?')[1]);
+        const propertyId = params.get('propertyId');
+        const leaseId = params.get('leaseId');
+        
+        if (propertyId || leaseId) {
+          setReportFilter({
+            propertyId: propertyId || undefined,
+            leaseId: leaseId || undefined
+          });
+          setActiveTab('reporting');
+        } else {
+          setActiveTab('reporting');
+        }
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    // Initial check
+    if (window.location.hash.startsWith('#reporting')) handleHashChange();
+
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
   useEffect(() => {
     const playSound = () => {
       audioRef.current?.play().catch(e => console.error("Audio play failed:", e));

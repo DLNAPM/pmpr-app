@@ -68,14 +68,33 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
     useEffect(() => { 
         if (initialFilter) { 
-            setFilters(prev => ({ 
-                ...prev, 
-                status: initialFilter.status || 'all', 
-                repairStatus: initialFilter.repairStatus || 'all' 
-            })); 
+            setFilters(prev => {
+                const newFilters = { 
+                    ...prev, 
+                    status: initialFilter.status || prev.status, 
+                    repairStatus: initialFilter.repairStatus || prev.repairStatus,
+                    propertyId: initialFilter.propertyId || prev.propertyId,
+                    tenantId: initialFilter.tenantId || prev.tenantId
+                };
+
+                // If leaseId is provided, we need to set the dates
+                if (initialFilter.leaseId && initialFilter.leaseId !== 'all') {
+                    const selectedLease = leases.find(l => l.id === initialFilter.leaseId);
+                    if (selectedLease) {
+                        return {
+                            ...newFilters,
+                            leaseId: initialFilter.leaseId,
+                            startDate: selectedLease.leaseStart.split('T')[0],
+                            endDate: selectedLease.leaseEnd.split('T')[0]
+                        };
+                    }
+                }
+                
+                return newFilters;
+            }); 
             onFilterApplied(); 
         } 
-    }, [initialFilter, onFilterApplied]);
+    }, [initialFilter, onFilterApplied, leases]);
 
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
@@ -189,6 +208,140 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         if (filters.propertyId === 'all') return [];
         return leases.filter(l => l.propertyId === filters.propertyId).sort((a,b) => new Date(b.leaseStart).getTime() - new Date(a.leaseStart).getTime());
     }, [leases, filters.propertyId]);
+
+    const handleGenerateLeasePeriodReport = (lease: Lease) => {
+        if (!user?.isPro) {
+            setProFeatureModal({ isOpen: true, featureName: 'Lease Period Summary (PDF)' });
+            return;
+        }
+
+        const property = properties.find(p => p.id === lease.propertyId);
+        if (!property) return;
+
+        const { jsPDF } = jspdf;
+        const doc = new jsPDF();
+
+        const primaryBlue = [51, 102, 204];
+        const secondarySlate = [71, 85, 105];
+
+        // Header
+        doc.setFontSize(24);
+        doc.setTextColor(...primaryBlue);
+        doc.setFont('helvetica', 'bold');
+        doc.text('LEASE PERIOD SUMMARY', 20, 25);
+
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, 32);
+
+        // Property & Tenant Info
+        doc.setFillColor(248, 250, 252);
+        doc.rect(20, 40, 170, 35, 'F');
+        
+        doc.setFontSize(12);
+        doc.setTextColor(0);
+        doc.setFont('helvetica', 'bold');
+        doc.text(property.name, 25, 50);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(property.address, 25, 56);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Tenants:', 110, 50);
+        doc.setFont('helvetica', 'normal');
+        doc.text(lease.tenants.map(t => t.name).join(', '), 110, 56);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Lease Period:', 25, 68);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${new Date(lease.leaseStart).toLocaleDateString()} to ${new Date(lease.leaseEnd).toLocaleDateString()}`, 55, 68);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Monthly Rent:', 110, 68);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`$${lease.rentAmount.toFixed(2)}`, 140, 68);
+
+        // Financials
+        const start = new Date(lease.leaseStart);
+        const end = new Date(lease.leaseEnd);
+        
+        const leasePayments = payments.filter(p => {
+            if (p.propertyId !== lease.propertyId) return false;
+            const pDate = new Date(p.year, p.month - 1, 1);
+            return pDate >= start && pDate <= end;
+        });
+
+        const leaseRepairs = repairs.filter(r => {
+            if (r.propertyId !== lease.propertyId) return false;
+            const rDate = new Date(r.requestDate);
+            return rDate >= start && rDate <= end;
+        });
+
+        const totalRentBilled = leasePayments.reduce((sum, p) => sum + p.rentBillAmount, 0);
+        const totalRentPaid = leasePayments.reduce((sum, p) => sum + p.rentPaidAmount, 0);
+        const totalUtilsBilled = leasePayments.reduce((sum, p) => sum + p.utilities.reduce((s, u) => s + u.billAmount, 0), 0);
+        const totalUtilsPaid = leasePayments.reduce((sum, p) => sum + p.utilities.reduce((s, u) => s + u.paidAmount, 0), 0);
+        const totalRepairs = leaseRepairs.reduce((sum, r) => sum + r.cost, 0);
+
+        const summaryRows = [
+            ['Rent Revenue', `$${totalRentBilled.toFixed(2)}`, `$${totalRentPaid.toFixed(2)}`, `$${(totalRentBilled - totalRentPaid).toFixed(2)}`],
+            ['Utility Reimbursements', `$${totalUtilsBilled.toFixed(2)}`, `$${totalUtilsPaid.toFixed(2)}`, `$${(totalUtilsBilled - totalUtilsPaid).toFixed(2)}`],
+            ['Maintenance / Repairs', `$${totalRepairs.toFixed(2)}`, '-', `$${totalRepairs.toFixed(2)}`],
+            ['Security Deposit', `$${lease.securityDeposit?.toFixed(2) || '0.00'}`, '-', '-']
+        ];
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Financial Summary', 20, 90);
+
+        doc.autoTable({
+            head: [['Description', 'Billed/Cost', 'Collected', 'Balance']],
+            body: summaryRows,
+            startY: 95,
+            theme: 'grid',
+            headStyles: { fillColor: primaryBlue },
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+        });
+
+        // Detail List
+        const detailRows: any[] = [];
+        leasePayments.sort((a,b) => (a.year * 12 + a.month) - (b.year * 12 + b.month)).forEach(p => {
+            detailRows.push([`${MONTHS[p.month-1]} ${p.year}`, 'Rent', p.rentBillAmount.toFixed(2), p.rentPaidAmount.toFixed(2)]);
+            p.utilities.forEach(u => {
+                if (u.billAmount > 0) {
+                    detailRows.push([`${MONTHS[p.month-1]} ${p.year}`, u.category, u.billAmount.toFixed(2), u.paidAmount.toFixed(2)]);
+                }
+            });
+        });
+
+        leaseRepairs.forEach(r => {
+            detailRows.push([new Date(r.requestDate).toLocaleDateString(), `Repair: ${r.description.substring(0, 30)}`, r.cost.toFixed(2), '-']);
+        });
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Transaction Details', 20, (doc as any).lastAutoTable.finalY + 15);
+
+        doc.autoTable({
+            head: [['Date/Month', 'Description', 'Amount', 'Paid']],
+            body: detailRows,
+            startY: (doc as any).lastAutoTable.finalY + 20,
+            theme: 'striped',
+            headStyles: { fillColor: secondarySlate },
+            columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } }
+        });
+
+        const netIncome = totalRentPaid + totalUtilsPaid - totalRepairs;
+        const footerY = (doc as any).lastAutoTable.finalY + 15;
+        
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(netIncome >= 0 ? 30 : 200, netIncome >= 0 ? 120 : 30, 30);
+        doc.text(`Estimated Net Cash Flow: $${netIncome.toFixed(2)}`, 190, footerY, { align: 'right' });
+
+        doc.save(`Lease_Report_${property.name.replace(/\s/g, '_')}_${new Date(lease.leaseStart).getFullYear()}.pdf`);
+    };
 
     const handleExport = () => { 
         const headers = ['Date', 'Property Name', 'Type', 'Category', 'Bill Amount', 'Paid Amount', 'Balance']; 
@@ -768,6 +921,7 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                                     <th className="p-4 border-b border-slate-700 text-right">Rent</th>
                                     <th className="p-4 border-b border-slate-700 text-right">Deposit</th>
                                     <th className="p-4 border-b border-slate-700 text-center">Status</th>
+                                    <th className="p-4 border-b border-slate-700 text-center">Report</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -792,6 +946,15 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                                                 }`}>
                                                     {lease.status}
                                                 </span>
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <button 
+                                                    onClick={() => handleGenerateLeasePeriodReport(lease)}
+                                                    className="p-1.5 bg-slate-50 rounded-lg text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                                    title="Generate Period Financial Report"
+                                                >
+                                                    <DocumentTextIcon className="w-4 h-4" />
+                                                </button>
                                             </td>
                                         </tr>
                                     );
