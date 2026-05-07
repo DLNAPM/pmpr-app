@@ -83,8 +83,28 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
         doc.setFont('times', 'normal'); // More professional for legal docs
         doc.setFontSize(fontSize);
         
-        const splitText = doc.splitTextToSize(populatedLease, usableWidth);
         let cursorY = margin;
+
+        // Add Company Logo if available
+        if (user?.companyLogo) {
+            try {
+                // Determine format
+                const format = user.companyLogo.includes('png') ? 'PNG' : 'JPEG';
+                doc.addImage(user.companyLogo, format, margin, cursorY, 25, 25);
+                cursorY += 30; // Move cursor down after logo
+            } catch (error) {
+                console.error("Error adding logo to PDF:", error);
+            }
+        } else if (user?.companyName) {
+            doc.setFont('times', 'bold');
+            doc.setFontSize(16);
+            doc.text(user.companyName, margin, cursorY);
+            cursorY += 10;
+            doc.setFont('times', 'normal');
+            doc.setFontSize(fontSize);
+        }
+        
+        const splitText = doc.splitTextToSize(populatedLease, usableWidth);
         let pageCount = 1;
         
         splitText.forEach((line: string) => {
@@ -282,7 +302,17 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
                                     exit={{ opacity: 0, y: -10 }}
                                     className="h-full p-6 bg-slate-100 overflow-y-auto"
                                 >
-                                    <div className="max-w-2xl mx-auto shadow-2xl bg-white p-12 min-h-full font-serif text-sm leading-loose text-slate-900 border border-gray-200 ring-1 ring-black/5">
+                                    <div className="max-w-2xl mx-auto shadow-2xl bg-white p-12 min-h-full font-serif text-sm leading-loose text-slate-900 border border-gray-100 ring-1 ring-black/5">
+                                        {user?.companyLogo && (
+                                            <div className="mb-8 border-b pb-8">
+                                                <img src={user.companyLogo} className="w-24 h-24 object-contain" alt="Company Logo" />
+                                            </div>
+                                        )}
+                                        {!user?.companyLogo && user?.companyName && (
+                                            <div className="mb-8 border-b pb-8">
+                                                <h1 className="text-2xl font-bold uppercase">{user.companyName}</h1>
+                                            </div>
+                                        )}
                                         <div className="whitespace-pre-wrap">
                                             {populatedLease}
                                         </div>
