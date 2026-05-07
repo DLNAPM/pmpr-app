@@ -22,13 +22,33 @@ const LeaseForm: React.FC<{
         leaseStart: lease?.leaseStart?.split('T')[0] || '',
         leaseEnd: lease?.leaseEnd?.split('T')[0] || '',
         rentAmount: lease?.rentAmount || 0,
-        tenants: lease?.tenants || [],
-        status: lease?.status || 'historic'
+        securityDeposit: lease?.securityDeposit || 0,
+        tenants: lease?.tenants || [{ id: crypto.randomUUID(), name: '', email: '', phone: '' }],
+        status: lease?.status || 'historic',
+        notes: lease?.notes || ''
     });
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: name === 'rentAmount' ? parseFloat(value) || 0 : value }));
+        setFormData(prev => ({ 
+            ...prev, 
+            [name]: (name === 'rentAmount' || name === 'securityDeposit') ? parseFloat(value) || 0 : value 
+        }));
+    };
+
+    const handleTenantChange = (index: number, field: keyof Omit<Tenant, 'id'>, value: string) => {
+        const newTenants = [...formData.tenants];
+        newTenants[index] = {...newTenants[index], [field]: value};
+        setFormData(prev => ({ ...prev, tenants: newTenants }));
+    };
+
+    const addTenant = () => {
+        setFormData(prev => ({ ...prev, tenants: [...prev.tenants, {id: crypto.randomUUID(), name: '', email: '', phone: ''}] }));
+    };
+
+    const removeTenant = (index: number) => {
+        if (formData.tenants.length <= 1) return;
+        setFormData(prev => ({ ...prev, tenants: prev.tenants.filter((_, i) => i !== index) }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -53,10 +73,38 @@ const LeaseForm: React.FC<{
                     <input type="date" name="leaseEnd" value={formData.leaseEnd} onChange={handleChange} required className="w-full p-2 border rounded" />
                 </div>
             </div>
-            <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Monthly Rent</label>
-                <input type="number" name="rentAmount" value={formData.rentAmount} onChange={handleChange} required className="w-full p-2 border rounded" />
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Monthly Rent</label>
+                    <input type="number" name="rentAmount" value={formData.rentAmount} onChange={handleChange} required className="w-full p-2 border rounded" />
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Security Deposit</label>
+                    <input type="number" name="securityDeposit" value={formData.securityDeposit} onChange={handleChange} className="w-full p-2 border rounded" />
+                </div>
             </div>
+            
+            <div>
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Tenants (for this period)</h3>
+                {formData.tenants.map((tenant, index) => (
+                    <div key={tenant.id} className="p-3 border rounded mb-2 space-y-2 bg-slate-50 relative">
+                         {formData.tenants.length > 1 && (
+                            <button type="button" onClick={() => removeTenant(index)} className="absolute top-2 right-2 text-red-400 hover:text-red-600">
+                                <TrashIcon className="w-4 h-4"/>
+                            </button>
+                        )}
+                        <input type="text" value={tenant.name} onChange={(e) => handleTenantChange(index, 'name', e.target.value)} placeholder="Tenant Name" required className="w-full p-2 border rounded text-sm" />
+                        <div className="grid grid-cols-2 gap-2">
+                            <input type="email" value={tenant.email} onChange={(e) => handleTenantChange(index, 'email', e.target.value)} placeholder="Email" className="w-full p-2 border rounded text-sm" />
+                            <input type="tel" value={tenant.phone} onChange={(e) => handleTenantChange(index, 'phone', e.target.value)} placeholder="Phone" className="w-full p-2 border rounded text-sm" />
+                        </div>
+                    </div>
+                ))}
+                <button type="button" onClick={addTenant} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-bold">
+                    <PlusIcon className="w-3 h-3" /> Add Another Tenant
+                </button>
+            </div>
+
             <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Status</label>
                 <select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded">
@@ -64,8 +112,20 @@ const LeaseForm: React.FC<{
                     <option value="active">Active (Current Lease)</option>
                     <option value="upcoming">Upcoming</option>
                 </select>
-                <p className="mt-1 text-[10px] text-gray-500 italic">Changing to 'Active' will update the property's current rent and dates.</p>
+                <p className="mt-1 text-[10px] text-gray-500 italic">Changing to 'Active' will update the property's current rent, dates, and tenants.</p>
             </div>
+
+            <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Notes / Terms</label>
+                <textarea 
+                    name="notes" 
+                    value={formData.notes} 
+                    onChange={handleChange} 
+                    placeholder="Key terms, renewal conditions, or payment exceptions..."
+                    className="w-full p-2 border rounded text-sm h-20"
+                />
+            </div>
+
             <div className="flex justify-end gap-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-100 text-gray-600 rounded text-sm font-bold">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold shadow-sm">Save Lease Record</button>
@@ -107,7 +167,7 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
                 await updateLease(leaseData);
             }
         } else {
-            await addLease({ ...leaseData, tenants: property?.tenants || [] });
+            await addLease(leaseData);
         }
 
         // If the lease is marked as active, sync current property info
@@ -116,7 +176,9 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
                 ...property,
                 leaseStart: leaseData.leaseStart,
                 leaseEnd: leaseData.leaseEnd,
-                rentAmount: leaseData.rentAmount
+                rentAmount: leaseData.rentAmount,
+                tenants: leaseData.tenants,
+                securityDeposit: leaseData.securityDeposit || property.securityDeposit
             });
         }
         
@@ -231,9 +293,16 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
                             </div>
                             
                             <div className="flex items-center gap-3 text-xs text-slate-500 mb-3 mt-2">
-                                <span className="flex items-center gap-1"><UserIcon className="w-3 h-3" /> {lease.tenants.length} Tenant(s)</span>
+                                <span className="flex items-center gap-1 font-medium"><UserIcon className="w-3 h-3" /> {lease.tenants.length} Tenant(s)</span>
                                 <span className="flex items-center gap-1"><ClockIcon className="w-3 h-3" /> {Math.round((new Date(lease.leaseEnd).getTime() - new Date(lease.leaseStart).getTime()) / (1000 * 60 * 60 * 24 * 30))} Months</span>
+                                {lease.securityDeposit && <span className="flex items-center gap-1 text-slate-400">| SD: ${lease.securityDeposit}</span>}
                             </div>
+
+                            {lease.notes && (
+                                <div className="mb-3 p-2 bg-slate-50/50 rounded text-[10px] text-slate-500 italic border-l-2 border-slate-200">
+                                    "{lease.notes.length > 100 ? lease.notes.substring(0, 100) + '...' : lease.notes}"
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-2 gap-4 pt-3 border-t border-gray-100">
                                 <div>

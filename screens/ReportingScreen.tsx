@@ -92,14 +92,36 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         payments.forEach(p => { 
             const property = properties.find(prop => prop.id === p.propertyId); 
             if (!property) return; 
-            const tenantName = property.tenants.map(t => t.name).join(', ');
+            
+            const paymentDate = new Date(p.year, p.month - 1, 1).getTime();
+            const relevantLease = leases.find(l => {
+                const start = new Date(l.leaseStart).getTime();
+                const end = new Date(l.leaseEnd).getTime();
+                return l.propertyId === p.propertyId && paymentDate >= start && paymentDate <= end;
+            });
+
+            const tenantName = relevantLease 
+                ? relevantLease.tenants.map(t => t.name).join(', ')
+                : property.tenants.map(t => t.name).join(', ');
+
             items.push({ date: new Date(p.year, p.month - 1, 1).toISOString(), propertyName: property.name, tenantName, type: 'Rent', category: 'Rent', billAmount: p.rentBillAmount, paidAmount: p.rentPaidAmount, balance: p.rentBillAmount - p.rentPaidAmount, originalId: p.id, userId: p.userId }); 
             p.utilities.forEach(u => { items.push({ date: new Date(p.year, p.month - 1, 1).toISOString(), propertyName: property.name, tenantName, type: 'Utility', category: u.category, billAmount: u.billAmount, paidAmount: u.paidAmount, balance: u.billAmount - u.paidAmount, originalId: p.id, userId: p.userId }); }); 
         }); 
         repairs.forEach(r => { 
             const property = properties.find(prop => prop.id === r.propertyId); 
             if (!property) return; 
-            const tenantName = property.tenants.map(t => t.name).join(', ');
+
+            const repairTime = new Date(r.requestDate).getTime();
+            const relevantLease = leases.find(l => {
+                const start = new Date(l.leaseStart).getTime();
+                const end = new Date(l.leaseEnd).getTime();
+                return l.propertyId === r.propertyId && repairTime >= start && repairTime <= end;
+            });
+
+            const tenantName = relevantLease 
+                ? relevantLease.tenants.map(t => t.name).join(', ')
+                : property.tenants.map(t => t.name).join(', ');
+
             items.push({ date: r.requestDate, propertyName: property.name, tenantName, type: 'Repair', category: 'Repair', billAmount: r.cost, paidAmount: r.status === RepairStatus.COMPLETE ? r.cost : 0, balance: r.status === RepairStatus.COMPLETE ? 0 : r.cost, repairStatus: r.status, originalId: r.id, userId: r.userId }); 
         }); 
 
@@ -237,10 +259,18 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.text(selectedProperty.id.substring(0, 6).toUpperCase(), 170, 47);
 
         doc.setFontSize(11);
+        const reportMonthDate = new Date(filters.reportYear, filters.reportMonth - 1, 1).getTime();
+        const activeLease = leases.find(l => {
+            const start = new Date(l.leaseStart).getTime();
+            const end = new Date(l.leaseEnd).getTime();
+            return l.propertyId === selectedProperty.id && reportMonthDate >= start && reportMonthDate <= end;
+        });
+
         doc.setFont('helvetica', 'bold');
         doc.text('Bill To:', 20, 65);
         doc.setFont('helvetica', 'normal');
-        const mainTenant = selectedProperty.tenants[0];
+        const displayTenants = activeLease ? activeLease.tenants : selectedProperty.tenants;
+        const mainTenant = displayTenants[0];
         doc.text(mainTenant?.name || '[Tenant Name]', 35, 65);
         doc.text(selectedProperty.address, 35, 71);
         doc.text(mainTenant?.phone || '[Phone]', 35, 77);
@@ -251,7 +281,10 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         doc.text(selectedProperty.name, 130, 65);
         doc.text(selectedProperty.address, 130, 71);
         doc.text('Contract Period:', 110, 83);
-        doc.text(`${new Date(selectedProperty.leaseStart).toLocaleDateString()} to ${new Date(selectedProperty.leaseEnd).toLocaleDateString()}`, 145, 83);
+
+        const periodStart = activeLease ? new Date(activeLease.leaseStart).toLocaleDateString() : new Date(selectedProperty.leaseStart).toLocaleDateString();
+        const periodEnd = activeLease ? new Date(activeLease.leaseEnd).toLocaleDateString() : new Date(selectedProperty.leaseEnd).toLocaleDateString();
+        doc.text(`${periodStart} to ${periodEnd}`, 145, 83);
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(12);

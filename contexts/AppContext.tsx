@@ -149,6 +149,7 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
             leaseStart: p.leaseStart,
             leaseEnd: p.leaseEnd,
             rentAmount: p.rentAmount,
+            securityDeposit: p.securityDeposit,
             tenants: p.tenants,
             status: 'active'
         };
@@ -194,6 +195,7 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
                     leaseStart: newStart.toISOString(),
                     leaseEnd: newEnd.toISOString(),
                     rentAmount: finalRent,
+                    securityDeposit: p.securityDeposit,
                     tenants: p.tenants,
                     status: 'active'
                 };
@@ -377,6 +379,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
             leaseStart: p.leaseStart,
             leaseEnd: p.leaseEnd,
             rentAmount: p.rentAmount,
+            securityDeposit: p.securityDeposit,
             tenants: p.tenants,
             status: 'active'
         }));
@@ -469,6 +472,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
             leaseStart: newStart.toISOString(),
             leaseEnd: newEnd.toISOString(),
             rentAmount: finalRent,
+            securityDeposit: p.securityDeposit,
             tenants: p.tenants,
             status: 'active'
         }));

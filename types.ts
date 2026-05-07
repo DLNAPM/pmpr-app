@@ -63,8 +63,10 @@ export interface Lease {
   leaseStart: string; // ISO string
   leaseEnd: string; // ISO string
   rentAmount: number;
+  securityDeposit?: number;
   tenants: Tenant[];
   status: 'active' | 'historic' | 'upcoming';
+  notes?: string;
 }
 
 export interface Property {
