@@ -9,15 +9,85 @@ import { UTILITY_CATEGORIES, MONTHS } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 import LeaseGeneratorModal from '../components/LeaseGeneratorModal';
 
+import { Lease } from '../types';
+
+const LeaseForm: React.FC<{
+    propertyId: string;
+    lease?: Lease;
+    onSave: (lease: Omit<Lease, 'id'> | Lease) => void;
+    onCancel: () => void;
+}> = ({ propertyId, lease, onSave, onCancel }) => {
+    const [formData, setFormData] = useState<Omit<Lease, 'id'>>({
+        propertyId,
+        leaseStart: lease?.leaseStart?.split('T')[0] || '',
+        leaseEnd: lease?.leaseEnd?.split('T')[0] || '',
+        rentAmount: lease?.rentAmount || 0,
+        tenants: lease?.tenants || [],
+        status: lease?.status || 'historic'
+    });
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: name === 'rentAmount' ? parseFloat(value) || 0 : value }));
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const leaseData = {
+            ...formData,
+            leaseStart: new Date(formData.leaseStart).toISOString(),
+            leaseEnd: new Date(formData.leaseEnd).toISOString(),
+        };
+        onSave(lease ? { ...leaseData, id: lease.id } as Lease : leaseData);
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Lease Start</label>
+                    <input type="date" name="leaseStart" value={formData.leaseStart} onChange={handleChange} required className="w-full p-2 border rounded" />
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Lease End</label>
+                    <input type="date" name="leaseEnd" value={formData.leaseEnd} onChange={handleChange} required className="w-full p-2 border rounded" />
+                </div>
+            </div>
+            <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Monthly Rent</label>
+                <input type="number" name="rentAmount" value={formData.rentAmount} onChange={handleChange} required className="w-full p-2 border rounded" />
+            </div>
+            <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Status</label>
+                <select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded">
+                    <option value="historic">Historic (Past Lease)</option>
+                    <option value="active">Active (Current Lease)</option>
+                    <option value="upcoming">Upcoming</option>
+                </select>
+                <p className="mt-1 text-[10px] text-gray-500 italic">Changing to 'Active' will update the property's current rent and dates.</p>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+                <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-100 text-gray-600 rounded text-sm font-bold">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold shadow-sm">Save Lease Record</button>
+            </div>
+        </form>
+    );
+};
+
 const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => void}> = ({ propertyId, onGenerate }) => {
-    const { leases, payments, properties } = useAppContext();
+    const { leases, payments, properties, addLease, updateLease, deleteLease, updateProperty } = useAppContext();
+    const { isReadOnly } = useAuth();
+    
+    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [editingLease, setEditingLease] = useState<Lease | undefined>(undefined);
+
     const property = properties.find(p => p.id === propertyId);
     let propertyLeases = leases.filter(l => l.propertyId === propertyId).sort((a,b) => new Date(b.leaseStart).getTime() - new Date(a.leaseStart).getTime());
 
     // If no explicit lease records, use property data as active lease
     if (propertyLeases.length === 0 && property) {
         propertyLeases = [{
-            id: 'current',
+            id: 'current_placeholder',
             propertyId: property.id,
             leaseStart: property.leaseStart,
             leaseEnd: property.leaseEnd,
@@ -26,6 +96,40 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
             status: 'active'
         }];
     }
+
+    const handleSaveLease = async (leaseData: any) => {
+        if ('id' in leaseData) {
+            if (leaseData.id === 'current_placeholder') {
+                // If they edit the placeholder, we actually create it as a real record
+                const { id, ...rest } = leaseData;
+                await addLease(rest);
+            } else {
+                await updateLease(leaseData);
+            }
+        } else {
+            await addLease({ ...leaseData, tenants: property?.tenants || [] });
+        }
+
+        // If the lease is marked as active, sync current property info
+        if (leaseData.status === 'active' && property) {
+            updateProperty({
+                ...property,
+                leaseStart: leaseData.leaseStart,
+                leaseEnd: leaseData.leaseEnd,
+                rentAmount: leaseData.rentAmount
+            });
+        }
+        
+        setIsFormOpen(false);
+        setEditingLease(undefined);
+    };
+
+    const handleDeleteLease = async (id: string) => {
+        if (id === 'current_placeholder') return;
+        if (window.confirm('Delete this lease record? This won\'t delete payments, but historical accuracy for this period might be lost in reports.')) {
+            await deleteLease(id);
+        }
+    };
 
     const getLeaseStats = (leaseId: string) => {
         const lease = propertyLeases.find(l => l.id === leaseId);
@@ -46,8 +150,28 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
         return { billed, paid };
     };
 
+    if (isFormOpen) {
+        return (
+            <LeaseForm 
+                propertyId={propertyId}
+                lease={editingLease}
+                onSave={handleSaveLease}
+                onCancel={() => { setIsFormOpen(false); setEditingLease(undefined); }}
+            />
+        );
+    }
+
     return (
         <div className="space-y-4">
+            {!isReadOnly && (
+                <button 
+                    onClick={() => setIsFormOpen(true)}
+                    className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-xs font-bold text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all flex items-center justify-center gap-1"
+                >
+                    <PlusIcon className="w-4 h-4" /> Add Past/Manual Lease Record
+                </button>
+            )}
+
             {propertyLeases.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No lease history found.</p>
             ) : (
@@ -55,21 +179,50 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
                     const stats = getLeaseStats(lease.id);
                     const isCurrent = lease.status === 'active';
                     return (
-                        <div key={lease.id} className={`p-4 border rounded-xl ${isCurrent ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-100' : 'bg-white border-gray-100 shadow-sm'}`}>
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center gap-2">
-                                    <h4 className="font-bold text-slate-800">
-                                        {new Date(lease.leaseStart).toLocaleDateString()} - {new Date(lease.leaseEnd).toLocaleDateString()}
-                                    </h4>
-                                    {isCurrent && (
-                                        <span className="px-1.5 py-0.5 bg-blue-600 text-[10px] text-white font-bold rounded uppercase tracking-wider">Current</span>
+                        <div key={lease.id} className={`p-4 border rounded-xl relative group ${isCurrent ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-100' : 'bg-white border-gray-100 shadow-sm'}`}>
+                            {!isReadOnly && (
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        onClick={() => { setEditingLease(lease); setIsFormOpen(true); }}
+                                        className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                                        title="Edit Lease Record"
+                                    >
+                                        <PencilSquareIcon className="w-4 h-4" />
+                                    </button>
+                                    {lease.id !== 'current_placeholder' && (
+                                        <button 
+                                            onClick={() => handleDeleteLease(lease.id)}
+                                            className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                            title="Delete Lease Record"
+                                        >
+                                            <TrashIcon className="w-4 h-4" />
+                                        </button>
                                     )}
                                 </div>
-                                <div className="text-right flex flex-col items-end gap-2">
-                                    <p className="text-sm font-bold text-blue-800">${lease.rentAmount}/mo</p>
+                            )}
+
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="font-bold text-slate-800">
+                                            {new Date(lease.leaseStart).toLocaleDateString()} - {new Date(lease.leaseEnd).toLocaleDateString()}
+                                        </h4>
+                                        {isCurrent && (
+                                            <span className="px-1.5 py-0.5 bg-blue-600 text-[10px] text-white font-bold rounded uppercase tracking-wider">Current</span>
+                                        )}
+                                        {lease.status === 'upcoming' && (
+                                            <span className="px-1.5 py-0.5 bg-green-100 text-[10px] text-green-700 font-bold rounded uppercase tracking-wider">Upcoming</span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                                        <CurrencyDollarIcon className="w-3 h-3" />
+                                        <span className="font-bold text-slate-700">${lease.rentAmount}/mo</span> rent
+                                    </p>
+                                </div>
+                                <div className="text-right pt-8 sm:pt-0">
                                     <button 
                                         onClick={() => onGenerate(lease)}
-                                        className="flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 text-blue-600 rounded text-[10px] font-bold hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                        className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 text-blue-600 rounded text-[10px] font-bold hover:bg-blue-600 hover:text-white transition-all shadow-sm"
                                     >
                                         <DocumentTextIcon className="w-3 h-3" />
                                         Generate
@@ -77,7 +230,7 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
                                 </div>
                             </div>
                             
-                            <div className="flex items-center gap-3 text-xs text-slate-500 mb-3">
+                            <div className="flex items-center gap-3 text-xs text-slate-500 mb-3 mt-2">
                                 <span className="flex items-center gap-1"><UserIcon className="w-3 h-3" /> {lease.tenants.length} Tenant(s)</span>
                                 <span className="flex items-center gap-1"><ClockIcon className="w-3 h-3" /> {Math.round((new Date(lease.leaseEnd).getTime() - new Date(lease.leaseStart).getTime()) / (1000 * 60 * 60 * 24 * 30))} Months</span>
                             </div>

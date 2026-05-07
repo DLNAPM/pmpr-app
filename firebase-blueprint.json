@@ -1,0 +1,168 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "companyName": { "type": "string" }
+      },
+      "required": ["email", "name"]
+    },
+    "Property": {
+      "title": "Property",
+      "description": "Managed rental property",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "rentAmount": { "type": "number" },
+        "securityDeposit": { "type": "number" },
+        "leaseStart": { "type": "string", "format": "date-time" },
+        "leaseEnd": { "type": "string", "format": "date-time" },
+        "tenants": { 
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "email": { "type": "string", "format": "email" },
+              "phone": { "type": "string" }
+            }
+          }
+        },
+        "utilitiesToTrack": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["userId", "name", "address", "rentAmount", "leaseStart", "leaseEnd"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Monthly rent and utility payment record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "year": { "type": "number" },
+        "month": { "type": "number" },
+        "rentBillAmount": { "type": "number" },
+        "rentPaidAmount": { "type": "number" },
+        "utilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": { "type": "string" },
+              "billAmount": { "type": "number" },
+              "paidAmount": { "type": "number" }
+            }
+          }
+        },
+        "notes": { "type": "string" },
+        "status": { "type": "string", "enum": ["paid", "partial", "unpaid"] }
+      },
+      "required": ["userId", "propertyId", "year", "month"]
+    },
+    "Repair": {
+      "title": "Repair",
+      "description": "Maintenance and repair request",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "contractorId": { "type": "string" },
+        "description": { "type": "string" },
+        "cost": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "in-progress", "completed"] },
+        "requestDate": { "type": "string", "format": "date-time" },
+        "completeDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "propertyId", "description", "status"]
+    },
+    "Lease": {
+      "title": "Lease",
+      "description": "Record of a lease term",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "leaseStart": { "type": "string", "format": "date-time" },
+        "leaseEnd": { "type": "string", "format": "date-time" },
+        "rentAmount": { "type": "number" },
+        "tenants": { "type": "array" },
+        "status": { "type": "string", "enum": ["active", "historic", "upcoming"] }
+      },
+      "required": ["userId", "propertyId", "leaseStart", "leaseEnd", "status"]
+    },
+    "LeaseTemplate": {
+      "title": "LeaseTemplate",
+      "description": "User-defined lease document template",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "content": { "type": "string" }
+      },
+      "required": ["userId", "name", "content"]
+    },
+    "Contractor": {
+      "title": "Contractor",
+      "description": "Information for maintenance contractors",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "specialty": { "type": "string" }
+      },
+      "required": ["userId", "name"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System or user notifications",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderEmail": { "type": "string" },
+        "recipientEmail": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "isAcknowledged": { "type": "boolean" },
+        "message": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["userId", "recipientEmail", "timestamp"]
+    },
+    "Share": {
+      "title": "Share",
+      "description": "Property access sharing record",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "viewerId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "shareDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "viewerId", "propertyId"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "Collection of user profiles" },
+    "properties": { "schema": "Property", "description": "Collection of properties" },
+    "payments": { "schema": "Payment", "description": "Collection of payments" },
+    "repairs": { "schema": "Repair", "description": "Collection of repairs" },
+    "leases": { "schema": "Lease", "description": "Collection of historical and current leases" },
+    "leaseTemplates": { "schema": "LeaseTemplate", "description": "Collection of lease templates" },
+    "contractors": { "schema": "Contractor", "description": "Collection of contractors" },
+    "notifications": { "schema": "Notification", "description": "Collection of notifications" },
+    "shares": { "schema": "Share", "description": "Collection of shares between users" }
+  }
+}
