@@ -108,7 +108,7 @@ service cloud.firestore {
     match /leaseTemplates/{templateId} {
       function isValidTemplate(t) {
         return t.userId == request.auth.uid && 
-               isValidString(t.name, 1, 200) && 
+               t.name is string && t.name.size() > 0 && t.name.size() <= 200 &&
                t.content is string;
       }
       allow read: if isSignedIn() && isOwner(existing());

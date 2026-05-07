@@ -73,13 +73,40 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
 
     const handleDownload = () => {
         const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 20;
+        const fontSize = 11; // Slightly smaller for professional look
+        const lineHeight = 6; 
+        const usableWidth = pageWidth - (margin * 2);
         
-        // Basic PDF formatting
-        const splitText = doc.splitTextToSize(populatedLease, 180);
-        doc.setFontSize(12);
-        doc.text(splitText, 15, 20);
+        doc.setFont('times', 'normal'); // More professional for legal docs
+        doc.setFontSize(fontSize);
         
-        const fileName = `Lease_${property.name.replace(/\s+/g, '_')}_${new Date(lease.leaseStart).getFullYear()}.pdf`;
+        const splitText = doc.splitTextToSize(populatedLease, usableWidth);
+        let cursorY = margin;
+        let pageCount = 1;
+        
+        splitText.forEach((line: string) => {
+            if (cursorY + lineHeight > pageHeight - margin) {
+                // Add page number to footer before adding new page
+                doc.setFontSize(8);
+                doc.text(`Page ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+                
+                doc.addPage();
+                pageCount++;
+                cursorY = margin;
+                doc.setFontSize(fontSize);
+            }
+            doc.text(line, margin, cursorY);
+            cursorY += lineHeight;
+        });
+        
+        // Add last page footer
+        doc.setFontSize(8);
+        doc.text(`Page ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        
+        const fileName = `Lease_${property.name.replace(/\s+/g, '_')}.pdf`;
         doc.save(fileName);
     };
 
@@ -250,13 +277,15 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
                             ) : (
                                 <motion.div 
                                     key="preview"
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: 20 }}
-                                    className="h-full p-8 bg-white overflow-y-auto font-serif text-sm leading-relaxed text-slate-800"
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    className="h-full p-6 bg-slate-100 overflow-y-auto"
                                 >
-                                    <div className="max-w-prose mx-auto whitespace-pre-wrap">
-                                        {populatedLease}
+                                    <div className="max-w-2xl mx-auto shadow-2xl bg-white p-12 min-h-full font-serif text-sm leading-loose text-slate-900 border border-gray-200 ring-1 ring-black/5">
+                                        <div className="whitespace-pre-wrap">
+                                            {populatedLease}
+                                        </div>
                                     </div>
                                 </motion.div>
                             )}

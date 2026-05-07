@@ -419,7 +419,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const updateLeaseTemplate = async (t: LeaseTemplate) => { 
         if (isReadOnly) return;
         try {
-            await db.collection('leaseTemplates').doc(t.id).set(sanitizeData(t), { merge: true }); 
+            await db.collection('leaseTemplates').doc(t.id).set(sanitizeData({ ...t, userId: user.id }), { merge: true }); 
         } catch (error) {
             handleFirestoreError(error, OperationType.UPDATE, `leaseTemplates/${t.id}`, user);
         }

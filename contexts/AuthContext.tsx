@@ -55,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: any | null) => {
       if (firebaseUser) {
-        const { uid, displayName, email } = firebaseUser;
+        const { uid, displayName, email, emailVerified } = firebaseUser;
         
         const safeEmail = email || '';
         const safeName = displayName || safeEmail.split('@')[0] || 'Google User';
@@ -77,6 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: uid, 
             name: safeName, 
             email: safeEmail,
+            emailVerified: emailVerified,
             ...profileData,
             isAdmin: isSuperAdmin || (profileData as any).isAdmin,
             isPro: isSuperAdmin || (profileData as any).isPro
@@ -89,6 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 await db.collection('users').doc(uid).set({ 
                     name: safeName, 
                     email: safeEmail,
+                    emailVerified: emailVerified,
                     lastLogin: new Date().toISOString()
                 }, { merge: true });
                 
