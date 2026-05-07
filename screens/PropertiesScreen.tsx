@@ -3,10 +3,96 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant } from '../types';
-import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon } from '../components/Icons';
+import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon, CalendarDaysIcon, CurrencyDollarIcon, ClockIcon } from '../components/Icons';
 import Modal from '../components/Modal';
-import { UTILITY_CATEGORIES } from '../constants';
+import { UTILITY_CATEGORIES, MONTHS } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
+
+const LeaseHistory: React.FC<{propertyId: string}> = ({ propertyId }) => {
+    const { leases, payments, properties } = useAppContext();
+    const property = properties.find(p => p.id === propertyId);
+    let propertyLeases = leases.filter(l => l.propertyId === propertyId).sort((a,b) => new Date(b.leaseStart).getTime() - new Date(a.leaseStart).getTime());
+
+    // If no explicit lease records, use property data as active lease
+    if (propertyLeases.length === 0 && property) {
+        propertyLeases = [{
+            id: 'current',
+            propertyId: property.id,
+            leaseStart: property.leaseStart,
+            leaseEnd: property.leaseEnd,
+            rentAmount: property.rentAmount,
+            tenants: property.tenants,
+            status: 'active'
+        }];
+    }
+
+    const getLeaseStats = (leaseId: string) => {
+        const lease = propertyLeases.find(l => l.id === leaseId);
+        if (!lease) return { billed: 0, paid: 0 };
+
+        const start = new Date(lease.leaseStart);
+        const end = new Date(lease.leaseEnd);
+
+        const leasePayments = payments.filter(p => {
+            if (p.propertyId !== propertyId) return false;
+            const pDate = new Date(p.year, p.month - 1, 1);
+            return pDate >= start && pDate <= end;
+        });
+
+        const billed = leasePayments.reduce((sum, p) => sum + p.rentBillAmount + p.utilities.reduce((s, u) => s + u.billAmount, 0), 0);
+        const paid = leasePayments.reduce((sum, p) => sum + p.rentPaidAmount + p.utilities.reduce((s, u) => s + u.paidAmount, 0), 0);
+        
+        return { billed, paid };
+    };
+
+    return (
+        <div className="space-y-4">
+            {propertyLeases.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No lease history found.</p>
+            ) : (
+                propertyLeases.map(lease => {
+                    const stats = getLeaseStats(lease.id);
+                    const isCurrent = lease.status === 'active';
+                    return (
+                        <div key={lease.id} className={`p-4 border rounded-xl ${isCurrent ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-100' : 'bg-white border-gray-100 shadow-sm'}`}>
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex items-center gap-2">
+                                    <h4 className="font-bold text-slate-800">
+                                        {new Date(lease.leaseStart).toLocaleDateString()} - {new Date(lease.leaseEnd).toLocaleDateString()}
+                                    </h4>
+                                    {isCurrent && (
+                                        <span className="px-1.5 py-0.5 bg-blue-600 text-[10px] text-white font-bold rounded uppercase tracking-wider">Current</span>
+                                    )}
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-bold text-blue-800">${lease.rentAmount}/mo</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-3 text-xs text-slate-500 mb-3">
+                                <span className="flex items-center gap-1"><UserIcon className="w-3 h-3" /> {lease.tenants.length} Tenant(s)</span>
+                                <span className="flex items-center gap-1"><ClockIcon className="w-3 h-3" /> {Math.round((new Date(lease.leaseEnd).getTime() - new Date(lease.leaseStart).getTime()) / (1000 * 60 * 60 * 24 * 30))} Months</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-gray-100">
+                                <div>
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Lease Totals</p>
+                                    <p className="text-sm font-black text-slate-700">${stats.billed.toFixed(2)}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Balance</p>
+                                    <p className={`text-sm font-black ${(stats.billed - stats.paid) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                        ${(stats.billed - stats.paid).toFixed(2)}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })
+            )}
+        </div>
+    );
+};
 
 const PropertyForm: React.FC<{property?: Property; onSave: (property: Omit<Property, 'id' | 'userId'> | Property) => void; onCancel: () => void}> = ({ property, onSave, onCancel }) => {
     const [formData, setFormData] = useState<Omit<Property, 'id' | 'userId' | 'ownerInfo'>>({
@@ -149,6 +235,14 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
         }
     }, [action, onActionDone, openAddModal]);
 
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [historyPropertyId, setHistoryPropertyId] = useState<string | null>(null);
+
+    const openHistoryModal = (propertyId: string) => {
+        setHistoryPropertyId(propertyId);
+        setIsHistoryModalOpen(true);
+    };
+
     const handleSave = (propertyData: Omit<Property, 'id' | 'userId'> | Property) => {
         if ('id' in propertyData) {
             updateProperty(propertyData as Property);
@@ -223,6 +317,18 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                 </div>
                             ))}
                         </CardContent>
+                         <CardFooter className="flex justify-between items-center bg-slate-50/50 border-t border-gray-100">
+                             <button 
+                                onClick={() => openHistoryModal(prop.id)}
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                             >
+                                <CalendarDaysIcon className="w-4 h-4" />
+                                View Lease History
+                             </button>
+                             <div className="text-xs font-medium text-slate-500">
+                                Expires: {new Date(prop.leaseEnd).toLocaleDateString()}
+                             </div>
+                         </CardFooter>
                     </Card>
                 ))}
                  {properties.length === 0 && (
@@ -239,6 +345,10 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                     onSave={handleSave} 
                     onCancel={() => setIsModalOpen(false)} 
                 />
+            </Modal>
+
+            <Modal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} title="Lease History">
+                {historyPropertyId && <LeaseHistory propertyId={historyPropertyId} />}
             </Modal>
         </div>
     );

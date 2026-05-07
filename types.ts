@@ -57,18 +57,29 @@ export interface Repair {
   userId: string;
 }
 
+export interface Lease {
+  id: string;
+  propertyId: string;
+  leaseStart: string; // ISO string
+  leaseEnd: string; // ISO string
+  rentAmount: number;
+  tenants: Tenant[];
+  status: 'active' | 'historic' | 'upcoming';
+}
+
 export interface Property {
   id:string;
   name: string;
   address: string;
   tenants: Tenant[];
-  leaseStart: string; // ISO string
-  leaseEnd: string; // ISO string
+  leaseStart: string; // ISO string (current)
+  leaseEnd: string; // ISO string (current)
   securityDeposit: number;
   rentAmount: number; // This is the standard monthly rent bill amount
   utilitiesToTrack: string[];
   userId: string;
   ownerInfo?: { name: string; email: string }; // Optional field to display owner info for shared properties
+  leaseHistory?: Lease[]; // Added to track multiple leases
 }
 
 export interface DBOwner {

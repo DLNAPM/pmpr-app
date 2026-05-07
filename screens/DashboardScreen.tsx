@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import Card, { CardContent, CardHeader } from '../components/Card';
 import ProgressBar from '../components/ProgressBar';
 import { useAppContext } from '../contexts/AppContext';
-import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon, CurrencyDollarIcon, ArrowTopRightOnSquareIcon, ExclamationTriangleIcon, CalendarIcon } from '../components/Icons';
+import { BuildingOfficeIcon, CreditCardIcon, WrenchScrewdriverIcon, MapPinIcon, CurrencyDollarIcon, ArrowTopRightOnSquareIcon, ExclamationTriangleIcon, CalendarDaysIcon } from '../components/Icons';
 import { RepairStatus, Property } from '../types';
 import { ReportFilter } from '../App';
 import { MONTHS } from '../constants';

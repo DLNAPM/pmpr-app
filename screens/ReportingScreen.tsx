@@ -48,12 +48,13 @@ interface ReportingScreenProps {
 }
 
 const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilterApplied, onEditItem }) => {
-    const { properties, payments, repairs, addPayment, updatePayment, addRepair, deletePayment, deleteRepair } = useAppContext();
+    const { properties, payments, repairs, leases, addPayment, updatePayment, addRepair, deletePayment, deleteRepair } = useAppContext();
     const { isReadOnly, user } = useAuth();
     
     const [filters, setFilters] = useState({ 
         type: 'all', 
         propertyId: 'all', 
+        leaseId: 'all',
         tenantId: 'all', 
         startDate: '', 
         endDate: '', 
@@ -127,8 +128,29 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { 
         const { name, value } = e.target;
-        setFilters(prev => ({...prev, [name]: (name === 'reportMonth' || name === 'reportYear') ? parseInt(value) : value})); 
+        if (name === 'propertyId') {
+            setFilters(prev => ({ ...prev, [name]: value, leaseId: 'all' }));
+        } else if (name === 'leaseId') {
+            const selectedLease = leases.find(l => l.id === value);
+            if (selectedLease) {
+                setFilters(prev => ({
+                    ...prev,
+                    [name]: value,
+                    startDate: selectedLease.leaseStart.split('T')[0],
+                    endDate: selectedLease.leaseEnd.split('T')[0]
+                }));
+            } else {
+                setFilters(prev => ({ ...prev, [name]: value }));
+            }
+        } else {
+            setFilters(prev => ({...prev, [name]: (name === 'reportMonth' || name === 'reportYear') ? parseInt(value) : value})); 
+        }
     };
+
+    const propertyLeases = useMemo(() => {
+        if (filters.propertyId === 'all') return [];
+        return leases.filter(l => l.propertyId === filters.propertyId).sort((a,b) => new Date(b.leaseStart).getTime() - new Date(a.leaseStart).getTime());
+    }, [leases, filters.propertyId]);
 
     const handleExport = () => { 
         const headers = ['Date', 'Property Name', 'Type', 'Category', 'Bill Amount', 'Paid Amount', 'Balance']; 
@@ -535,6 +557,19 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                                     {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                 </select>
                             </div>
+                            {filters.propertyId !== 'all' && (
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Lease Period</label>
+                                    <select name="leaseId" value={filters.leaseId} onChange={handleFilterChange} className="w-full p-2 border rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="all">Custom Date Range or All</option>
+                                        {propertyLeases.map(l => (
+                                            <option key={l.id} value={l.id}>
+                                                {new Date(l.leaseStart).toLocaleDateString()} to {new Date(l.leaseEnd).toLocaleDateString()} (${l.rentAmount}/mo)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div>
                                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Target Month</label>
                                 <div className="flex gap-2">

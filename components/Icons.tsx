@@ -149,9 +149,15 @@ export const ExclamationTriangleIcon: React.FC<React.SVGProps<SVGSVGElement>> = 
   </svg>
 );
 
-export const CalendarIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const CalendarDaysIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5a2.25 2.25 0 002.25-2.25m-18 0V15h18v3.75M7.5 11.25h.008v.008H7.5v-.008zm3.75 0h.008v.008H11.25v-.008zm3.75 0h.008v.008H15v-.008zm3.75 0h.008v.008H18.75v-.008zm-11.25 3.75h.008v.008H7.5v-.008zm3.75 3.75h.008v.008H11.25v-.008zm3.75 3.75h.008v.008H15v-.008zm3.75 3.75h.008v.008H18.75v-.008z" />
+  </svg>
+);
+
+export const ClockIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
