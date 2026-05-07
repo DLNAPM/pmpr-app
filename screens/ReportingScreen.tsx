@@ -87,6 +87,22 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     
     const tenants = useMemo(() => properties.flatMap(p => p.tenants.map(t => ({...t, propertyName: p.name, propertyId: p.id}))), [properties]);
     
+    const [activeTab, setActiveTab] = useState<'transactions' | 'leases'>('transactions');
+
+    const filteredLeases = useMemo(() => {
+        let list = leases;
+        if (filters.propertyId !== 'all') {
+            list = list.filter(l => l.propertyId === filters.propertyId);
+        }
+        if (filters.tenantId !== 'all') {
+            const tenant = tenants.find(t => t.id === filters.tenantId);
+            if (tenant) {
+                list = list.filter(l => l.tenants.some(t => t.name === tenant.name));
+            }
+        }
+        return list.sort((a,b) => new Date(b.leaseStart).getTime() - new Date(a.leaseStart).getTime());
+    }, [leases, filters.propertyId, filters.tenantId, tenants]);
+
     const reportData = useMemo(() => { 
         const items: ReportItem[] = []; 
         payments.forEach(p => { 
@@ -655,75 +671,141 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
                 </CardContent>
             </Card>
 
-            <Card className="overflow-hidden border-none shadow-lg">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-slate-800 text-white text-xs uppercase tracking-widest">
-                                <th className="p-4 border-b border-slate-700">Date</th>
-                                <th className="p-4 border-b border-slate-700">Property / Tenant</th>
-                                <th className="p-4 border-b border-slate-700">Description</th>
-                                <th className="p-4 border-b border-slate-700 text-right">Bill</th>
-                                <th className="p-4 border-b border-slate-700 text-right">Paid</th>
-                                <th className="p-4 border-b border-slate-700 text-right">Balance</th>
-                                <th className="p-4 border-b border-slate-700 text-center">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {reportData.map((item, idx) => (
-                                <tr key={`${item.originalId}-${idx}`} className="hover:bg-blue-50/50 transition-colors text-sm group">
-                                    <td className="p-4 whitespace-nowrap text-slate-500">{new Date(item.date).toLocaleDateString()}</td>
-                                    <td className="p-4">
-                                        <p className="font-bold text-slate-800">{item.propertyName}</p>
-                                        <p className="text-xs text-slate-500">{item.tenantName}</p>
-                                    </td>
-                                    <td className="p-4">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${item.type === 'Repair' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
-                                            {item.type}
-                                        </span>
-                                        <span className="ml-2 text-slate-600">{item.category}</span>
-                                    </td>
-                                    <td className="p-4 text-right font-medium">${item.billAmount.toFixed(2)}</td>
-                                    <td className="p-4 text-right text-green-600 font-medium">${item.paidAmount.toFixed(2)}</td>
-                                    <td className={`p-4 text-right font-black ${item.balance > 0 ? 'text-red-600' : 'text-slate-300'}`}>
-                                        ${item.balance.toFixed(2)}
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        <button 
-                                            disabled={isReadOnly}
-                                            onClick={() => onEditItem({ type: item.type === 'Repair' ? 'repair' : 'payment', id: item.originalId })}
-                                            className="text-slate-300 hover:text-blue-600 p-1.5 bg-slate-50 rounded-lg transition-all hover:shadow-sm disabled:opacity-30"
-                                        >
-                                            <PencilSquareIcon className="w-4 h-4" />
-                                        </button>
-                                    </td>
+            <div className="flex border-b border-gray-200 mb-4">
+                <button 
+                    onClick={() => setActiveTab('transactions')}
+                    className={`px-6 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'transactions' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                    Financial Transactions
+                </button>
+                <button 
+                    onClick={() => setActiveTab('leases')}
+                    className={`px-6 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'leases' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                    Lease Registry (Record Keeping)
+                </button>
+            </div>
+
+            {activeTab === 'transactions' ? (
+                <Card className="overflow-hidden border-none shadow-lg">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-800 text-white text-xs uppercase tracking-widest">
+                                    <th className="p-4 border-b border-slate-700">Date</th>
+                                    <th className="p-4 border-b border-slate-700">Property / Tenant</th>
+                                    <th className="p-4 border-b border-slate-700">Description</th>
+                                    <th className="p-4 border-b border-slate-700 text-right">Bill</th>
+                                    <th className="p-4 border-b border-slate-700 text-right">Paid</th>
+                                    <th className="p-4 border-b border-slate-700 text-right">Balance</th>
+                                    <th className="p-4 border-b border-slate-700 text-center">Actions</th>
                                 </tr>
-                            ))}
-                            {reportData.length === 0 && (
-                                <tr>
-                                    <td colSpan={7} className="p-20 text-center">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <ShieldCheckIcon className="w-12 h-12 text-slate-200" />
-                                            <p className="text-slate-400 font-medium">No results match your filters.</p>
-                                        </div>
-                                    </td>
-                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {reportData.map((item, idx) => (
+                                    <tr key={`${item.originalId}-${idx}`} className="hover:bg-blue-50/50 transition-colors text-sm group">
+                                        <td className="p-4 whitespace-nowrap text-slate-500">{new Date(item.date).toLocaleDateString()}</td>
+                                        <td className="p-4">
+                                            <p className="font-bold text-slate-800">{item.propertyName}</p>
+                                            <p className="text-xs text-slate-500">{item.tenantName}</p>
+                                        </td>
+                                        <td className="p-4">
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${item.type === 'Repair' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                {item.type}
+                                            </span>
+                                            <span className="ml-2 text-slate-600">{item.category}</span>
+                                        </td>
+                                        <td className="p-4 text-right font-medium">${item.billAmount.toFixed(2)}</td>
+                                        <td className="p-4 text-right text-green-600 font-medium">${item.paidAmount.toFixed(2)}</td>
+                                        <td className={`p-4 text-right font-black ${item.balance > 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                                            ${item.balance.toFixed(2)}
+                                        </td>
+                                        <td className="p-4 text-center">
+                                            <button 
+                                                disabled={isReadOnly}
+                                                onClick={() => onEditItem({ type: item.type === 'Repair' ? 'repair' : 'payment', id: item.originalId })}
+                                                className="text-slate-300 hover:text-blue-600 p-1.5 bg-slate-50 rounded-lg transition-all hover:shadow-sm disabled:opacity-30"
+                                            >
+                                                <PencilSquareIcon className="w-4 h-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {reportData.length === 0 && (
+                                    <tr>
+                                        <td colSpan={7} className="p-20 text-center">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <ShieldCheckIcon className="w-12 h-12 text-slate-200" />
+                                                <p className="text-slate-400 font-medium">No results match your filters.</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                            {reportData.length > 0 && (
+                                <tfoot className="bg-slate-50 font-black">
+                                    <tr>
+                                        <td colSpan={3} className="p-4 text-right text-slate-500 uppercase text-xs tracking-widest">Grand Totals</td>
+                                        <td className="p-4 text-right text-slate-900">${totals.billAmount.toFixed(2)}</td>
+                                        <td className="p-4 text-right text-green-700">${totals.paidAmount.toFixed(2)}</td>
+                                        <td className="p-4 text-right text-red-600">${totals.balance.toFixed(2)}</td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
                             )}
-                        </tbody>
-                        {reportData.length > 0 && (
-                            <tfoot className="bg-slate-50 font-black">
-                                <tr>
-                                    <td colSpan={3} className="p-4 text-right text-slate-500 uppercase text-xs tracking-widest">Grand Totals</td>
-                                    <td className="p-4 text-right text-slate-900">${totals.billAmount.toFixed(2)}</td>
-                                    <td className="p-4 text-right text-green-700">${totals.paidAmount.toFixed(2)}</td>
-                                    <td className="p-4 text-right text-red-600">${totals.balance.toFixed(2)}</td>
-                                    <td></td>
+                        </table>
+                    </div>
+                </Card>
+            ) : (
+                <Card className="overflow-hidden border-none shadow-lg">
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-800 text-white text-xs uppercase tracking-widest">
+                                    <th className="p-4 border-b border-slate-700">Lease Period</th>
+                                    <th className="p-4 border-b border-slate-700">Property</th>
+                                    <th className="p-4 border-b border-slate-700">Tenants</th>
+                                    <th className="p-4 border-b border-slate-700 text-right">Rent</th>
+                                    <th className="p-4 border-b border-slate-700 text-right">Deposit</th>
+                                    <th className="p-4 border-b border-slate-700 text-center">Status</th>
                                 </tr>
-                            </tfoot>
-                        )}
-                    </table>
-                </div>
-            </Card>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {filteredLeases.map((lease) => {
+                                    const prop = properties.find(p => p.id === lease.propertyId);
+                                    return (
+                                        <tr key={lease.id} className="hover:bg-blue-50/50 transition-colors text-sm">
+                                            <td className="p-4 whitespace-nowrap">
+                                                <p className="font-bold text-slate-800">
+                                                    {new Date(lease.leaseStart).toLocaleDateString()} - {new Date(lease.leaseEnd).toLocaleDateString()}
+                                                </p>
+                                            </td>
+                                            <td className="p-4 font-medium text-slate-700">{prop?.name || 'Unknown'}</td>
+                                            <td className="p-4 text-slate-600">{lease.tenants.map(t => t.name).join(', ')}</td>
+                                            <td className="p-4 text-right font-bold text-slate-800">${lease.rentAmount.toFixed(2)}</td>
+                                            <td className="p-4 text-right text-slate-500">${lease.securityDeposit?.toFixed(2) || '0.00'}</td>
+                                            <td className="p-4 text-center">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                                    lease.status === 'active' ? 'bg-blue-100 text-blue-700' : 
+                                                    lease.status === 'upcoming' ? 'bg-green-100 text-green-700' : 
+                                                    'bg-slate-100 text-slate-500'
+                                                }`}>
+                                                    {lease.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {filteredLeases.length === 0 && (
+                                    <tr>
+                                        <td colSpan={6} className="p-20 text-center text-slate-400">No lease records found for the selected filters.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
 
             {isImportModalOpen && importPreview && (
                 <Modal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} title="CSV Import Preview">
