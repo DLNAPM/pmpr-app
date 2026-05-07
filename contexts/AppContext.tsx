@@ -416,8 +416,22 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
             handleFirestoreError(error, OperationType.WRITE, 'leaseTemplates', user);
         }
     };
-    const updateLeaseTemplate = async (t: LeaseTemplate) => { if (!isReadOnly) await db.collection('leaseTemplates').doc(t.id).set(sanitizeData(t), { merge: true }); };
-    const deleteLeaseTemplate = async (id: string) => { if (!isReadOnly) await db.collection('leaseTemplates').doc(id).delete(); };
+    const updateLeaseTemplate = async (t: LeaseTemplate) => { 
+        if (isReadOnly) return;
+        try {
+            await db.collection('leaseTemplates').doc(t.id).set(sanitizeData(t), { merge: true }); 
+        } catch (error) {
+            handleFirestoreError(error, OperationType.UPDATE, `leaseTemplates/${t.id}`, user);
+        }
+    };
+    const deleteLeaseTemplate = async (id: string) => { 
+        if (isReadOnly) return;
+        try {
+            await db.collection('leaseTemplates').doc(id).delete(); 
+        } catch (error) {
+            handleFirestoreError(error, OperationType.DELETE, `leaseTemplates/${id}`, user);
+        }
+    };
 
     const addLease = async (l: any) => { if (!isReadOnly) await db.collection('leases').add(sanitizeData({ ...l, userId: user.id })); };
     const updateLease = async (l: Lease) => { if (!isReadOnly) await db.collection('leases').doc(l.id).set(sanitizeData(l), { merge: true }); };

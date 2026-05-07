@@ -12,11 +12,7 @@ service cloud.firestore {
     }
 
     function isOwner(data) {
-      return isSignedIn() && request.auth.uid == data.userId;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return isSignedIn() && data != null && 'userId' in data && request.auth.uid == data.userId;
     }
 
     function incoming() {
@@ -27,46 +23,65 @@ service cloud.firestore {
       return resource.data;
     }
 
+    function isValidString(val, min, max) {
+      return val is string && val.size() >= min && val.size() <= max;
+    }
+
     // --- Collections ---
 
     // Users
     match /users/{userId} {
+      function isValidUser(u) {
+        return isValidString(u.email, 3, 200) && isValidString(u.name, 1, 100);
+      }
       allow read: if isSignedIn();
-      allow write: if isOwner(existing()) || (request.auth.uid == userId && incoming().keys().hasAll(['email', 'name']));
+      allow write: if (request.auth.uid == userId && (existing() == null ? isValidUser(incoming()) : true));
     }
 
     // Properties
     match /properties/{propertyId} {
       function isValidProperty(p) {
-        return p.userId == request.auth.uid && p.name is string && p.name.size() > 0 && p.name.size() < 200;
+        return p.userId == request.auth.uid && 
+               isValidString(p.name, 1, 200) && 
+               isValidString(p.address, 1, 500) &&
+               p.rentAmount is number && p.rentAmount >= 0;
       }
       allow read: if isSignedIn() && (isOwner(existing()) || exists(/databases/$(database)/documents/shares/$(propertyId + "_" + request.auth.uid)));
       allow create: if isSignedIn() && isValidProperty(incoming());
-      allow update: if isSignedIn() && isOwner(existing()) && isValidProperty(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidProperty(incoming()) && incoming().userId == existing().userId;
       allow delete: if isSignedIn() && isOwner(existing());
     }
 
     // Payments
     match /payments/{paymentId} {
+      function isValidPayment(p) {
+        return p.userId == request.auth.uid && p.propertyId is string && p.year is number && p.month is number;
+      }
       allow read: if isSignedIn() && (isOwner(existing()) || exists(/databases/$(database)/documents/shares/$(existing().propertyId + "_" + request.auth.uid)));
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && isOwner(existing()) && incoming().userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidPayment(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidPayment(incoming()) && incoming().userId == existing().userId;
       allow delete: if isSignedIn() && isOwner(existing());
     }
 
     // Repairs
     match /repairs/{repairId} {
+      function isValidRepair(r) {
+        return r.userId == request.auth.uid && r.propertyId is string && isValidString(r.description, 1, 2000);
+      }
       allow read: if isSignedIn() && (isOwner(existing()) || exists(/databases/$(database)/documents/shares/$(existing().propertyId + "_" + request.auth.uid)));
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && isOwner(existing()) && incoming().userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidRepair(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidRepair(incoming()) && incoming().userId == existing().userId;
       allow delete: if isSignedIn() && isOwner(existing());
     }
 
     // Contractors
     match /contractors/{contractorId} {
+      function isValidContractor(c) {
+        return c.userId == request.auth.uid && isValidString(c.name, 1, 200);
+      }
       allow read: if isSignedIn() && isOwner(existing());
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && isOwner(existing()) && incoming().userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidContractor(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidContractor(incoming()) && incoming().userId == existing().userId;
       allow delete: if isSignedIn() && isOwner(existing());
     }
 
@@ -80,20 +95,25 @@ service cloud.firestore {
 
     // Leases
     match /leases/{leaseId} {
+      function isValidLease(l) {
+        return l.userId == request.auth.uid && l.propertyId is string;
+      }
       allow read: if isSignedIn() && (isOwner(existing()) || exists(/databases/$(database)/documents/shares/$(existing().propertyId + "_" + request.auth.uid)));
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isSignedIn() && isOwner(existing()) && incoming().userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidLease(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidLease(incoming()) && incoming().userId == existing().userId;
       allow delete: if isSignedIn() && isOwner(existing());
     }
 
     // Lease Templates
     match /leaseTemplates/{templateId} {
       function isValidTemplate(t) {
-        return t.userId == request.auth.uid && t.name is string && t.name.size() > 0 && t.content is string;
+        return t.userId == request.auth.uid && 
+               isValidString(t.name, 1, 200) && 
+               t.content is string;
       }
       allow read: if isSignedIn() && isOwner(existing());
       allow create: if isSignedIn() && isValidTemplate(incoming());
-      allow update: if isSignedIn() && isOwner(existing()) && isValidTemplate(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidTemplate(incoming()) && incoming().userId == existing().userId;
       allow delete: if isSignedIn() && isOwner(existing());
     }
 
