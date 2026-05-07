@@ -90,8 +90,9 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
             try {
                 // Determine format
                 const format = user.companyLogo.includes('png') ? 'PNG' : 'JPEG';
-                doc.addImage(user.companyLogo, format, margin, cursorY, 25, 25);
-                cursorY += 30; // Move cursor down after logo
+                const logoSize = 18; // Smaller
+                doc.addImage(user.companyLogo, format, pageWidth - margin - logoSize, cursorY, logoSize, logoSize);
+                cursorY += logoSize + 10; // Move cursor down after logo
             } catch (error) {
                 console.error("Error adding logo to PDF:", error);
             }
@@ -304,8 +305,8 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
                                 >
                                     <div className="max-w-2xl mx-auto shadow-2xl bg-white p-12 min-h-full font-serif text-sm leading-loose text-slate-900 border border-gray-100 ring-1 ring-black/5">
                                         {user?.companyLogo && (
-                                            <div className="mb-8 border-b pb-8">
-                                                <img src={user.companyLogo} className="w-24 h-24 object-contain" alt="Company Logo" />
+                                            <div className="flex justify-end mb-6">
+                                                <img src={user.companyLogo} className="w-20 h-20 object-contain" alt="Company Logo" />
                                             </div>
                                         )}
                                         {!user?.companyLogo && user?.companyName && (

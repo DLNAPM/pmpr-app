@@ -220,9 +220,22 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
         const { jsPDF } = jspdf;
         const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 20;
 
         const primaryBlue = [51, 102, 204];
         const secondarySlate = [71, 85, 105];
+
+        // Logo
+        if (user?.companyLogo) {
+            try {
+                const format = user.companyLogo.includes('png') ? 'PNG' : 'JPEG';
+                const logoSize = 18;
+                doc.addImage(user.companyLogo, format, pageWidth - margin - logoSize, 10, logoSize, logoSize);
+            } catch (e) {
+                console.error("PDF Logo Error:", e);
+            }
+        }
 
         // Header
         doc.setFontSize(24);
@@ -376,15 +389,19 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
         const primaryBlue = [51, 102, 204];
         const slateGrey = [100, 116, 139];
 
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 20;
+
         doc.setFontSize(28);
         doc.setTextColor(...primaryBlue);
         doc.setFont('helvetica', 'bold');
-        doc.text('STATEMENT', 140, 25);
+        doc.text('STATEMENT', margin, 25);
 
         if (user?.companyLogo) {
             try {
-                const logoData = user.companyLogo;
-                doc.addImage(logoData, 'PNG', 20, 15, 25, 25);
+                const format = user.companyLogo.includes('png') ? 'PNG' : 'JPEG';
+                const logoSize = 18;
+                doc.addImage(user.companyLogo, format, pageWidth - margin - logoSize, 15, logoSize, logoSize);
             } catch (e) {
                 console.error("PDF Logo Error:", e);
             }
@@ -392,8 +409,8 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
 
         doc.setFontSize(14);
         doc.setTextColor(0, 0, 0);
-        const startY = 25;
-        const infoX = user?.companyLogo ? 50 : 20;
+        const startY = 35;
+        const infoX = margin;
         doc.text(user?.companyName || user?.name || '[Company Name]', infoX, startY);
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
