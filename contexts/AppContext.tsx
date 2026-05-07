@@ -371,29 +371,44 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
 
     const addProperty = async (p: any) => {
         if (isReadOnly) return;
-        const ref = await db.collection('properties').add(sanitizeData({ ...p, userId: user.id }));
-        // Add initial lease
-        await db.collection('leases').add(sanitizeData({
-            propertyId: ref.id,
-            userId: user.id,
-            leaseStart: p.leaseStart,
-            leaseEnd: p.leaseEnd,
-            rentAmount: p.rentAmount,
-            securityDeposit: p.securityDeposit,
-            tenants: p.tenants,
-            status: 'active'
-        }));
+        try {
+            const ref = await db.collection('properties').add(sanitizeData({ ...p, userId: user.id }));
+            // Add initial lease
+            await db.collection('leases').add(sanitizeData({
+                propertyId: ref.id,
+                userId: user.id,
+                leaseStart: p.leaseStart,
+                leaseEnd: p.leaseEnd,
+                rentAmount: p.rentAmount,
+                securityDeposit: p.securityDeposit,
+                tenants: p.tenants,
+                status: 'active'
+            }));
+        } catch (error) {
+            handleFirestoreError(error, OperationType.WRITE, 'properties', user);
+        }
     };
-    const updateProperty = (up: any) => !isReadOnly && db.collection('properties').doc(up.id).set(sanitizeData(up), { merge: true });
+    const updateProperty = (up: any) => {
+        if (isReadOnly) return;
+        db.collection('properties').doc(up.id).set(sanitizeData(up), { merge: true })
+            .catch(error => handleFirestoreError(error, OperationType.UPDATE, `properties/${up.id}`, user));
+    };
     const deleteProperty = async (id: string) => {
         if(isReadOnly) return;
-        const batch = db.batch();
-        const pQuery = await db.collection('payments').where('propertyId', '==', id).get();
-        pQuery.forEach((d: any) => batch.delete(d.ref));
-        const rQuery = await db.collection('repairs').where('propertyId', '==', id).get();
-        rQuery.forEach((d: any) => batch.delete(d.ref));
-        batch.delete(db.collection('properties').doc(id));
-        await batch.commit();
+        try {
+            const batch = db.batch();
+            const pQuery = await db.collection('payments').where('propertyId', '==', id).where('userId', '==', user.id).get();
+            pQuery.forEach((d: any) => batch.delete(d.ref));
+            const rQuery = await db.collection('repairs').where('propertyId', '==', id).where('userId', '==', user.id).get();
+            rQuery.forEach((d: any) => batch.delete(d.ref));
+            const lQuery = await db.collection('leases').where('propertyId', '==', id).where('userId', '==', user.id).get();
+            lQuery.forEach((d: any) => batch.delete(d.ref));
+            
+            batch.delete(db.collection('properties').doc(id));
+            await batch.commit();
+        } catch (error) {
+            handleFirestoreError(error, OperationType.DELETE, `properties/${id}`, user);
+        }
     };
     const addPayment = (p: any) => !isReadOnly && db.collection('payments').add(sanitizeData({ ...p, userId: user.id }));
     const updatePayment = (up: any) => !isReadOnly && db.collection('payments').doc(up.id).set(sanitizeData(up), { merge: true });
@@ -442,48 +457,57 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
 
     const renewLease = async (propertyId: string, durationMonths: number, newRentAmount?: number) => {
         if (isReadOnly) return;
-        const p = properties.find(prop => prop.id === propertyId);
-        if (!p) return;
-        
-        // Start from day after previous lease end
-        const currentEnd = new Date(p.leaseEnd);
-        const newStart = new Date(currentEnd);
-        newStart.setDate(newStart.getDate() + 1);
-        
-        const newEnd = new Date(newStart);
-        newEnd.setMonth(newEnd.getMonth() + durationMonths);
-        
-        const finalRent = newRentAmount !== undefined ? newRentAmount : p.rentAmount;
+        try {
+            const p = properties.find(prop => prop.id === propertyId);
+            if (!p) return;
+            
+            // Start from day after previous lease end
+            const currentEnd = new Date(p.leaseEnd);
+            const newStart = new Date(currentEnd);
+            newStart.setDate(newStart.getDate() + 1);
+            
+            const newEnd = new Date(newStart);
+            newEnd.setMonth(newEnd.getMonth() + durationMonths);
+            
+            const finalRent = newRentAmount !== undefined ? newRentAmount : p.rentAmount;
 
-        const batch = db.batch();
-        
-        // Update current property state
-        batch.update(db.collection('properties').doc(propertyId), sanitizeData({
-            leaseStart: newStart.toISOString(),
-            leaseEnd: newEnd.toISOString(),
-            rentAmount: finalRent
-        }));
+            const batch = db.batch();
+            
+            // Update current property state
+            batch.update(db.collection('properties').doc(propertyId), sanitizeData({
+                leaseStart: newStart.toISOString(),
+                leaseEnd: newEnd.toISOString(),
+                rentAmount: finalRent
+            }));
 
-        // Add new lease record
-        const leaseRef = db.collection('leases').doc();
-        batch.set(leaseRef, sanitizeData({
-            propertyId,
-            userId: user.id,
-            leaseStart: newStart.toISOString(),
-            leaseEnd: newEnd.toISOString(),
-            rentAmount: finalRent,
-            securityDeposit: p.securityDeposit,
-            tenants: p.tenants,
-            status: 'active'
-        }));
+            // Add new lease record
+            const leaseRef = db.collection('leases').doc();
+            batch.set(leaseRef, sanitizeData({
+                propertyId,
+                userId: user.id,
+                leaseStart: newStart.toISOString(),
+                leaseEnd: newEnd.toISOString(),
+                rentAmount: finalRent,
+                securityDeposit: p.securityDeposit,
+                tenants: p.tenants,
+                status: 'active'
+            }));
 
-        // Set previous leases to historic
-        const previousLeases = await db.collection('leases').where('propertyId', '==', propertyId).where('status', '==', 'active').get();
-        previousLeases.forEach((doc: any) => {
-            batch.update(doc.ref, { status: 'historic' });
-        });
-        
-        await batch.commit();
+            // Set previous leases to historic
+            const previousLeases = await db.collection('leases')
+                .where('propertyId', '==', propertyId)
+                .where('userId', '==', user.id)
+                .where('status', '==', 'active')
+                .get();
+                
+            previousLeases.forEach((doc: any) => {
+                batch.update(doc.ref, { status: 'historic' });
+            });
+            
+            await batch.commit();
+        } catch (error) {
+            handleFirestoreError(error, OperationType.WRITE, `renewLease/${propertyId}`, user);
+        }
     };
 
     const value = useMemo(() => ({ properties, leases, leaseTemplates, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner: async () => { const snap = await db.collection('shares').where('ownerId', '==', user.id).get(); return snap.docs.map((d: any) => ({ id: d.id, ...d.data() })); }, findUserByEmail: async (email: string) => { const snap = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get(); return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as User; }, addShare: async (s: any) => { await db.collection('shares').doc(`${s.propertyId}_${s.viewerId}`).set(s); }, deleteShare: async (id: string) => { await db.collection('shares').doc(id).delete(); }, addLeaseTemplate, updateLeaseTemplate, deleteLeaseTemplate, addLease, updateLease, deleteLease, renewLease, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, leases, leaseTemplates, payments, repairs, contractors, notifications, user?.id, isReadOnly, hasGuestData, isMigrating, isLoading]);
