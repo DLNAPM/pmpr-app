@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
 import useLocalStorage from '../hooks/useLocalStorage';
 // Fix: Import User from '../types' where it is defined, instead of importing from AuthContext.tsx which only uses it.
-import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification, User, Lease } from '../types';
+import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification, User, Lease, LeaseTemplate } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../firebaseConfig';
 
@@ -32,6 +32,7 @@ interface AppContextType {
   contractors: Contractor[];
   notifications: Notification[];
   leases: Lease[];
+  leaseTemplates: LeaseTemplate[];
   isLoading: boolean;
   isMigrating: boolean;
   addProperty: (property: Omit<Property, 'id' | 'userId'>) => void;
@@ -59,6 +60,9 @@ interface AppContextType {
   findUserByEmail: (email: string) => Promise<User | null>;
   addShare: (shareData: Omit<Share, 'id'>) => Promise<void>;
   deleteShare: (shareId: string) => Promise<void>;
+  addLeaseTemplate: (template: Omit<LeaseTemplate, 'id' | 'userId'>) => Promise<void>;
+  updateLeaseTemplate: (template: LeaseTemplate) => Promise<void>;
+  deleteLeaseTemplate: (id: string) => Promise<void>;
   renewLease: (propertyId: string, durationMonths: number, newRentAmount?: number) => Promise<void>;
   migrateGuestData: () => Promise<void>;
   hasGuestData: boolean;
@@ -92,6 +96,7 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
     const [contractors, setContractors] = useLocalStorage<Contractor[]>(GUEST_KEYS.contractors, initialGuestData.contractors);
     const [notifications, setNotifications] = useLocalStorage<Notification[]>(GUEST_KEYS.notifications, initialGuestData.notifications);
     const [leases, setLeases] = useLocalStorage<Lease[]>('pmpr_guest_leases', []);
+    const [leaseTemplates, setLeaseTemplates] = useLocalStorage<LeaseTemplate[]>('pmpr_guest_lease_templates', []);
     
     const addProperty = (p: Omit<Property, 'id' | 'userId'>) => {
         const id = crypto.randomUUID();
@@ -124,6 +129,10 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
     const updateNotification = (id: string, updates: Partial<Notification>) => setNotifications(current => current.map(n => n.id === id ? { ...n, ...updates } : n));
     const deleteNotification = (id: string) => setNotifications(current => current.filter(n => n.id !== id));
 
+    const addLeaseTemplate = async (t: any) => setLeaseTemplates(cur => [...cur, { ...t, id: crypto.randomUUID(), userId: 'guest_user' }]);
+    const updateLeaseTemplate = async (t: LeaseTemplate) => setLeaseTemplates(cur => cur.map(i => i.id === t.id ? t : i));
+    const deleteLeaseTemplate = async (id: string) => setLeaseTemplates(cur => cur.filter(i => i.id !== id));
+
     const renewLease = async (propertyId: string, durationMonths: number, newRentAmount?: number) => {
         setProperties(cur => cur.map(p => {
             if (p.id === propertyId) {
@@ -155,7 +164,7 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
         }));
     };
 
-    const value = useMemo(() => ({ properties, leases, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, renewLease, migrateGuestData: async () => {}, hasGuestData: properties.length > 0, clearGuestData: () => {}, isMigrating: false, isUserPropertyOwner: async () => true }), [properties, leases, payments, repairs, contractors, notifications]);
+    const value = useMemo(() => ({ properties, leases, leaseTemplates, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, addLeaseTemplate, updateLeaseTemplate, deleteLeaseTemplate, renewLease, migrateGuestData: async () => {}, hasGuestData: properties.length > 0, clearGuestData: () => {}, isMigrating: false, isUserPropertyOwner: async () => true }), [properties, leases, leaseTemplates, payments, repairs, contractors, notifications]);
     return <AppProviderLogic data={value} isLoading={false}>{children}</AppProviderLogic>;
 };
 
@@ -166,6 +175,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const [contractors, setContractors] = useState<Contractor[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [leases, setLeases] = useState<Lease[]>([]);
+    const [leaseTemplates, setLeaseTemplates] = useState<LeaseTemplate[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isMigrating, setIsMigrating] = useState(false);
     const [hasGuestData, setHasGuestData] = useState(false);
@@ -198,7 +208,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
         let collectionsLoaded = 0;
         const markLoaded = () => {
             collectionsLoaded++;
-            if (collectionsLoaded >= 4) setIsLoading(false);
+            if (collectionsLoaded >= 6) setIsLoading(false);
         };
 
         // Safety timeout to avoid infinite spinner if Firestore is slow or rules are misconfigured
@@ -221,17 +231,18 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                         unsubs.push(db.collection('payments').where('propertyId', 'in', idsToQuery).onSnapshot(s => { setPayments(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
                         unsubs.push(db.collection('repairs').where('propertyId', 'in', idsToQuery).onSnapshot(s => { setRepairs(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
                         unsubs.push(db.collection('leases').where('propertyId', 'in', idsToQuery).onSnapshot(s => { setLeases(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                        unsubs.push(db.collection('leaseTemplates').where('userId', '==', user.id).onSnapshot(s => { setLeaseTemplates(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
                         
                         // Contractors don't have propertyId, they might fail read so we just set empty for now
                         setContractors([]);
                         markLoaded();
                     } else {
-                        collectionsLoaded += 5;
+                        collectionsLoaded += 6;
                         setIsLoading(false);
                     }
                 } catch (e) {
                     console.error("Error fetching shared data:", e);
-                    collectionsLoaded += 5;
+                    collectionsLoaded += 6;
                     setIsLoading(false);
                 }
             } else {
@@ -240,6 +251,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                 unsubs.push(db.collection('repairs').where('userId', '==', user.id).onSnapshot(s => { setRepairs(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
                 unsubs.push(db.collection('contractors').where('userId', '==', user.id).onSnapshot(s => { setContractors(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
                 unsubs.push(db.collection('leases').where('userId', '==', user.id).onSnapshot(s => { setLeases(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
+                unsubs.push(db.collection('leaseTemplates').where('userId', '==', user.id).onSnapshot(s => { setLeaseTemplates(s.docs.map(d => ({id: d.id, ...d.data()}))); markLoaded(); }, () => markLoaded()));
             }
         };
 
@@ -353,6 +365,10 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
     const updateNotification = (id: string, updates: any) => db.collection('notifications').doc(id).update(sanitizeData(updates));
     const deleteNotification = (id: string) => db.collection('notifications').doc(id).delete();
 
+    const addLeaseTemplate = async (t: any) => { if (!isReadOnly) await db.collection('leaseTemplates').add(sanitizeData({ ...t, userId: user.id })); };
+    const updateLeaseTemplate = async (t: LeaseTemplate) => { if (!isReadOnly) await db.collection('leaseTemplates').doc(t.id).set(sanitizeData(t), { merge: true }); };
+    const deleteLeaseTemplate = async (id: string) => { if (!isReadOnly) await db.collection('leaseTemplates').doc(id).delete(); };
+
     const renewLease = async (propertyId: string, durationMonths: number, newRentAmount?: number) => {
         if (isReadOnly) return;
         const p = properties.find(prop => prop.id === propertyId);
@@ -398,7 +414,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
         await batch.commit();
     };
 
-    const value = useMemo(() => ({ properties, leases, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner: async () => { const snap = await db.collection('shares').where('ownerId', '==', user.id).get(); return snap.docs.map((d: any) => ({ id: d.id, ...d.data() })); }, findUserByEmail: async (email: string) => { const snap = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get(); return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as User; }, addShare: async (s: any) => { await db.collection('shares').doc(`${s.propertyId}_${s.viewerId}`).set(s); }, deleteShare: async (id: string) => { await db.collection('shares').doc(id).delete(); }, renewLease, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, leases, payments, repairs, contractors, notifications, user?.id, isReadOnly, hasGuestData, isMigrating, isLoading]);
+    const value = useMemo(() => ({ properties, leases, leaseTemplates, payments, repairs, contractors, notifications, addProperty, updateProperty, deleteProperty, addPayment, updatePayment, deletePayment, addRepair, updateRepair, deleteRepair, addContractor, updateContractor, addNotification, updateNotification, deleteNotification, getSharesByOwner: async () => { const snap = await db.collection('shares').where('ownerId', '==', user.id).get(); return snap.docs.map((d: any) => ({ id: d.id, ...d.data() })); }, findUserByEmail: async (email: string) => { const snap = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get(); return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as User; }, addShare: async (s: any) => { await db.collection('shares').doc(`${s.propertyId}_${s.viewerId}`).set(s); }, deleteShare: async (id: string) => { await db.collection('shares').doc(id).delete(); }, addLeaseTemplate, updateLeaseTemplate, deleteLeaseTemplate, renewLease, migrateGuestData, clearGuestData, hasGuestData, isMigrating, isUserPropertyOwner: async () => properties.length > 0 }), [properties, leases, leaseTemplates, payments, repairs, contractors, notifications, user?.id, isReadOnly, hasGuestData, isMigrating, isLoading]);
     
     return <AppProviderLogic data={value} isLoading={isLoading}>{children}</AppProviderLogic>;
 };

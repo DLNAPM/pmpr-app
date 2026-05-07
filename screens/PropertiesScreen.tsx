@@ -3,12 +3,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant } from '../types';
-import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon, CalendarDaysIcon, CurrencyDollarIcon, ClockIcon } from '../components/Icons';
+import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon, CalendarDaysIcon, CurrencyDollarIcon, ClockIcon, DocumentTextIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { UTILITY_CATEGORIES, MONTHS } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
+import LeaseGeneratorModal from '../components/LeaseGeneratorModal';
 
-const LeaseHistory: React.FC<{propertyId: string}> = ({ propertyId }) => {
+const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => void}> = ({ propertyId, onGenerate }) => {
     const { leases, payments, properties } = useAppContext();
     const property = properties.find(p => p.id === propertyId);
     let propertyLeases = leases.filter(l => l.propertyId === propertyId).sort((a,b) => new Date(b.leaseStart).getTime() - new Date(a.leaseStart).getTime());
@@ -64,8 +65,15 @@ const LeaseHistory: React.FC<{propertyId: string}> = ({ propertyId }) => {
                                         <span className="px-1.5 py-0.5 bg-blue-600 text-[10px] text-white font-bold rounded uppercase tracking-wider">Current</span>
                                     )}
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right flex flex-col items-end gap-2">
                                     <p className="text-sm font-bold text-blue-800">${lease.rentAmount}/mo</p>
+                                    <button 
+                                        onClick={() => onGenerate(lease)}
+                                        className="flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 text-blue-600 rounded text-[10px] font-bold hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                    >
+                                        <DocumentTextIcon className="w-3 h-3" />
+                                        Generate
+                                    </button>
                                 </div>
                             </div>
                             
@@ -238,9 +246,17 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [historyPropertyId, setHistoryPropertyId] = useState<string | null>(null);
 
+    const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+    const [generatorLease, setGeneratorLease] = useState<any>(null);
+
     const openHistoryModal = (propertyId: string) => {
         setHistoryPropertyId(propertyId);
         setIsHistoryModalOpen(true);
+    };
+
+    const handleOpenGenerator = (lease: any) => {
+        setGeneratorLease(lease);
+        setIsGeneratorOpen(true);
     };
 
     const handleSave = (propertyData: Omit<Property, 'id' | 'userId'> | Property) => {
@@ -318,13 +334,33 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                             ))}
                         </CardContent>
                          <CardFooter className="flex justify-between items-center bg-slate-50/50 border-t border-gray-100">
-                             <button 
-                                onClick={() => openHistoryModal(prop.id)}
-                                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
-                             >
-                                <CalendarDaysIcon className="w-4 h-4" />
-                                View Lease History
-                             </button>
+                             <div className="flex gap-4">
+                                <button 
+                                    onClick={() => openHistoryModal(prop.id)}
+                                    className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+                                >
+                                    <ClockIcon className="w-4 h-4" />
+                                    History
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        setHistoryPropertyId(prop.id);
+                                        handleOpenGenerator({
+                                            id: 'current',
+                                            propertyId: prop.id,
+                                            leaseStart: prop.leaseStart,
+                                            leaseEnd: prop.leaseEnd,
+                                            rentAmount: prop.rentAmount,
+                                            tenants: prop.tenants,
+                                            status: 'active'
+                                        });
+                                    }}
+                                    className="text-xs font-bold text-slate-600 hover:text-blue-600 flex items-center gap-1 transition-colors"
+                                >
+                                    <DocumentTextIcon className="w-4 h-4" />
+                                    Lease Doc
+                                </button>
+                             </div>
                              <div className="text-xs font-medium text-slate-500">
                                 Expires: {new Date(prop.leaseEnd).toLocaleDateString()}
                              </div>
@@ -348,8 +384,17 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
             </Modal>
 
             <Modal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} title="Lease History">
-                {historyPropertyId && <LeaseHistory propertyId={historyPropertyId} />}
+                {historyPropertyId && <LeaseHistory propertyId={historyPropertyId} onGenerate={handleOpenGenerator} />}
             </Modal>
+
+            {isGeneratorOpen && generatorLease && historyPropertyId && (
+                <LeaseGeneratorModal 
+                    isOpen={isGeneratorOpen}
+                    onClose={() => setIsGeneratorOpen(false)}
+                    property={properties.find(p => p.id === historyPropertyId)!}
+                    lease={generatorLease}
+                />
+            )}
         </div>
     );
 };

@@ -120,6 +120,13 @@ export interface UserProfile {
   isAdmin?: boolean;
 }
 
+export interface LeaseTemplate {
+  id: string;
+  name: string;
+  content: string; // The text with placeholders like {{landlord}}, {{tenant}}, etc.
+  userId: string;
+}
+
 export interface User extends UserProfile {
   id: string;
   name: string;
