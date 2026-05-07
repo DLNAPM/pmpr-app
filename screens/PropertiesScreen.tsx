@@ -17,14 +17,15 @@ const LeaseForm: React.FC<{
     lease?: Lease;
     onSave: (lease: Omit<Lease, 'id'> | Lease) => void;
     onCancel: () => void;
-}> = ({ propertyId, lease, onSave, onCancel }) => {
+    defaultTenants?: Tenant[];
+}> = ({ propertyId, lease, onSave, onCancel, defaultTenants }) => {
     const [formData, setFormData] = useState<Omit<Lease, 'id'>>({
         propertyId,
         leaseStart: lease?.leaseStart?.split('T')[0] || '',
         leaseEnd: lease?.leaseEnd?.split('T')[0] || '',
         rentAmount: lease?.rentAmount || 0,
         securityDeposit: lease?.securityDeposit || 0,
-        tenants: lease?.tenants || [{ id: crypto.randomUUID(), name: '', email: '', phone: '' }],
+        tenants: lease?.tenants || defaultTenants?.map(t => ({...t, id: crypto.randomUUID()})) || [{ id: crypto.randomUUID(), name: '', email: '', phone: '' }],
         status: lease?.status || 'historic',
         notes: lease?.notes || ''
     });
@@ -220,6 +221,7 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
                 lease={editingLease}
                 onSave={handleSaveLease}
                 onCancel={() => { setIsFormOpen(false); setEditingLease(undefined); }}
+                defaultTenants={property?.tenants}
             />
         );
     }
