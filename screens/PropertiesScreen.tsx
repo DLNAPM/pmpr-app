@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import { UTILITY_CATEGORIES, MONTHS } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 import LeaseGeneratorModal from '../components/LeaseGeneratorModal';
+import LeaseRenewalModal from '../components/LeaseRenewalModal';
 
 import { Lease } from '../types';
 
@@ -292,10 +293,13 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
                                 </div>
                             </div>
                             
-                            <div className="flex items-center gap-3 text-xs text-slate-500 mb-3 mt-2">
-                                <span className="flex items-center gap-1 font-medium"><UserIcon className="w-3 h-3" /> {lease.tenants.length} Tenant(s)</span>
-                                <span className="flex items-center gap-1"><ClockIcon className="w-3 h-3" /> {Math.round((new Date(lease.leaseEnd).getTime() - new Date(lease.leaseStart).getTime()) / (1000 * 60 * 60 * 24 * 30))} Months</span>
-                                {lease.securityDeposit && <span className="flex items-center gap-1 text-slate-400">| SD: ${lease.securityDeposit}</span>}
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mb-3 mt-2">
+                                <span className="flex items-center gap-1 font-medium text-slate-700">
+                                    <UserIcon className="w-3 h-3" /> 
+                                    {lease.tenants.length} Tenant(s): {lease.tenants.map(t => t.name).join(', ')}
+                                </span>
+                                <span className="flex items-center gap-1 border-l pl-3 border-slate-200"><ClockIcon className="w-3 h-3" /> {Math.round((new Date(lease.leaseEnd).getTime() - new Date(lease.leaseStart).getTime()) / (1000 * 60 * 60 * 24 * 30))} Months</span>
+                                {lease.securityDeposit && <span className="flex items-center gap-1 text-slate-400 border-l pl-3 border-slate-200">SD: ${lease.securityDeposit}</span>}
                             </div>
 
                             {lease.notes && (
@@ -471,6 +475,9 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
     const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
     const [generatorLease, setGeneratorLease] = useState<any>(null);
 
+    const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
+    const [renewalProperty, setRenewalProperty] = useState<Property | null>(null);
+
     const openHistoryModal = (propertyId: string) => {
         setHistoryPropertyId(propertyId);
         setIsHistoryModalOpen(true);
@@ -480,6 +487,13 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
         setGeneratorLease(lease);
         setIsGeneratorOpen(true);
     };
+
+    const handleOpenRenewal = (property: Property) => {
+        setRenewalProperty(property);
+        setIsRenewalModalOpen(true);
+    };
+
+    const { renewLease } = useAppContext();
 
     const handleSave = (propertyData: Omit<Property, 'id' | 'userId'> | Property) => {
         if ('id' in propertyData) {
@@ -582,6 +596,15 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                     <DocumentTextIcon className="w-4 h-4" />
                                     Lease Doc
                                 </button>
+                                {!isReadOnly && (
+                                    <button 
+                                        onClick={() => handleOpenRenewal(prop)}
+                                        className="text-xs font-bold text-green-600 hover:text-green-800 flex items-center gap-1 transition-colors"
+                                    >
+                                        <CalendarDaysIcon className="w-4 h-4" />
+                                        Renew
+                                    </button>
+                                )}
                              </div>
                              <div className="text-xs font-medium text-slate-500">
                                 Expires: {new Date(prop.leaseEnd).toLocaleDateString()}
@@ -615,6 +638,15 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                     onClose={() => setIsGeneratorOpen(false)}
                     property={properties.find(p => p.id === historyPropertyId)!}
                     lease={generatorLease}
+                />
+            )}
+
+            {isRenewalModalOpen && renewalProperty && (
+                <LeaseRenewalModal 
+                    isOpen={isRenewalModalOpen}
+                    onClose={() => setIsRenewalModalOpen(false)}
+                    property={renewalProperty}
+                    onRenew={renewLease}
                 />
             )}
         </div>
