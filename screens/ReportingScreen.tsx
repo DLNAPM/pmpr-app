@@ -9,6 +9,7 @@ import { ReportFilter, EditTarget } from '../App';
 import { MONTHS } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 import ProFeatureModal from '../components/ProFeatureModal';
+import { formatDate } from '../utils';
 
 // Declare jsPDF globally
 declare const jspdf: any;
@@ -104,14 +105,6 @@ const ReportingScreen: React.FC<ReportingScreenProps> = ({ initialFilter, onFilt
     const [selections, setSelections] = useState<Record<string, string>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return 'N/A';
-        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-        const [year, month, day] = cleanDate.split('-').map(Number);
-        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
-        return new Date(year, month - 1, day).toLocaleDateString();
-    };
-
     const tenants = useMemo(() => properties.flatMap(p => p.tenants.map(t => ({...t, propertyName: p.name, propertyId: p.id}))), [properties]);
     
     const [activeTab, setActiveTab] = useState<'transactions' | 'leases'>('transactions');

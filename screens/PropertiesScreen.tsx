@@ -9,6 +9,7 @@ import { UTILITY_CATEGORIES, MONTHS } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 import LeaseGeneratorModal from '../components/LeaseGeneratorModal';
 import LeaseRenewalModal from '../components/LeaseRenewalModal';
+import { formatDate } from '../utils';
 
 import { Lease } from '../types';
 
@@ -140,14 +141,6 @@ const LeaseHistory: React.FC<{propertyId: string; onGenerate: (lease: any) => vo
     const { leases, payments, properties, addLease, updateLease, deleteLease, updateProperty } = useAppContext();
     const { isReadOnly } = useAuth();
     
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return 'N/A';
-        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-        const [year, month, day] = cleanDate.split('-').map(Number);
-        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
-        return new Date(year, month - 1, day).toLocaleDateString();
-    };
-
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingLease, setEditingLease] = useState<Lease | undefined>(undefined);
 

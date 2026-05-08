@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import { REPAIR_STATUS_OPTIONS } from '../constants';
 import { EditTarget } from '../App';
 import { useAuth } from '../contexts/AuthContext';
+import { formatDate } from '../utils';
 
 const ContractorForm: React.FC<{onSave: (contractor: Omit<Contractor, 'id' | 'userId'>) => void; onCancel: () => void;}> = ({ onSave, onCancel }) => {
     const [formData, setFormData] = useState({ name: '', contact: '', companyName: '', companyAddress: '', email: '', comments: '', });
@@ -157,15 +158,7 @@ const RepairsScreen: React.FC<RepairsScreenProps> = ({ action, editTarget, onAct
     };
 
     const getStatusColor = (status: RepairStatus) => { switch (status) { case RepairStatus.COMPLETE: return 'bg-green-100 text-green-800'; case RepairStatus.IN_PROGRESS: return 'bg-blue-100 text-blue-800'; case RepairStatus.PENDING_SUPPLY: return 'bg-yellow-100 text-yellow-800'; case RepairStatus.PENDING_REPAIRMEN: return 'bg-red-100 text-red-800'; default: return 'bg-gray-100 text-gray-800'; } };
-
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return 'N/A';
-        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-        const [year, month, day] = cleanDate.split('-').map(Number);
-        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
-        return new Date(year, month - 1, day).toLocaleDateString();
-    };
-
+    
     const sortedRepairs = useMemo(() => [...repairs].sort((a,b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime()), [repairs]);
 
     return (

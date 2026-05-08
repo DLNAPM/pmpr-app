@@ -6,6 +6,7 @@ import { Property, Lease, LeaseTemplate } from '../types';
 import { useAppContext } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { DocumentTextIcon, ArrowDownTrayIcon, PencilSquareIcon, CloudArrowUpIcon, TrashIcon } from './Icons';
+import { formatDate } from '../utils';
 
 interface LeaseGeneratorModalProps {
     isOpen: boolean;
@@ -53,16 +54,6 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
         if (selectedTemplateId === 'default') return DEFAULT_TEMPLATE;
         return leaseTemplates.find(t => t.id === selectedTemplateId)?.content || DEFAULT_TEMPLATE;
     }, [selectedTemplateId, leaseTemplates]);
-
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return 'N/A';
-        // If it's a T-separated ISO string, take only the date part
-        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-        const [year, month, day] = cleanDate.split('-').map(Number);
-        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
-        // Constructing date with year, monthIndex, day works in local time
-        return new Date(year, month - 1, day).toLocaleDateString();
-    };
 
     const populatedLease = useMemo(() => {
         const tenantNames = lease.tenants.length > 0 ? lease.tenants.map(t => t.name).join(', ') : 'N/A';

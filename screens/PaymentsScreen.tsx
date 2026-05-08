@@ -7,6 +7,7 @@ import { CreditCardIcon, PlusIcon, PencilSquareIcon, TrashIcon, ArrowDownTrayIco
 import { MONTHS } from '../constants';
 import { EditTarget } from '../App';
 import { useAuth } from '../contexts/AuthContext';
+import { formatDate } from '../utils';
 
 // Make jsPDF available from the global scope
 declare const jspdf: any;
@@ -398,15 +399,7 @@ const PaymentsScreen: React.FC<PaymentsScreenProps> = ({ action, editTarget, onA
     // Assuming isReadOnly is global for shared views, or we check ownership
     const isOwner = selectedProperty && !selectedProperty.ownerInfo; 
     const canEdit = !isReadOnly && isOwner;
-
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return 'N/A';
-        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-        const [year, month, day] = cleanDate.split('-').map(Number);
-        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
-        return new Date(year, month - 1, day).toLocaleDateString();
-    };
-
+    
     return (
         <div>
             <div className="flex flex-wrap justify-between items-center gap-4 mb-6">

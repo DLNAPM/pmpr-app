@@ -8,6 +8,7 @@ import { RepairStatus, Property } from '../types';
 import { ReportFilter } from '../App';
 import { MONTHS } from '../constants';
 import LeaseRenewalModal from '../components/LeaseRenewalModal';
+import { formatDate } from '../utils';
 
 interface DashboardScreenProps {
   onAction: (tab: 'properties' | 'payments' | 'repairs' | 'reporting' | 'contractors', action?: string) => void;
@@ -199,14 +200,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ onAction, onNavigateT
 
     const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
     
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return 'N/A';
-        const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-        const [year, month, day] = cleanDate.split('-').map(Number);
-        if (isNaN(year) || isNaN(month) || isNaN(day)) return dateStr;
-        return new Date(year, month - 1, day).toLocaleDateString();
-    };
-
     const getHealthColor = (score: number) => {
         if (score >= 85) return 'text-green-600';
         if (score >= 60) return 'text-yellow-600';
