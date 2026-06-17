@@ -9,6 +9,7 @@ import { UTILITY_CATEGORIES, MONTHS } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 import LeaseGeneratorModal from '../components/LeaseGeneratorModal';
 import LeaseRenewalModal from '../components/LeaseRenewalModal';
+import RoomsModal from '../components/RoomsModal';
 import { formatDate } from '../utils';
 
 import { Lease } from '../types';
@@ -466,6 +467,14 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState<Property | undefined>(undefined);
 
+    const [isRoomsModalOpen, setIsRoomsModalOpen] = useState(false);
+    const [roomsProperty, setRoomsProperty] = useState<Property | null>(null);
+
+    const openRoomsModal = (property: Property) => {
+        setRoomsProperty(property);
+        setIsRoomsModalOpen(true);
+    };
+
     const openAddModal = useCallback(() => {
         if (isReadOnly) return;
         setSelectedProperty(undefined);
@@ -584,9 +593,31 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                     </div>
                                 </div>
                             ))}
+                            {prop.rooms && prop.rooms.length > 0 && (
+                                <div className="mt-3 pt-3 border-t">
+                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                                        <BuildingOfficeIcon className="w-4 h-4 text-slate-400" />
+                                        Rooms & Occupancy
+                                    </p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {prop.rooms.map(r => {
+                                            const isRoomOccupied = r.tenants && r.tenants.length > 0 && r.tenants[0].name.trim() !== '';
+                                            return (
+                                                <span key={r.id} className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                                    isRoomOccupied 
+                                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                                                }`}>
+                                                    {r.title}
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </CardContent>
-                         <CardFooter className="flex justify-between items-center bg-slate-50/50 border-t border-gray-100">
-                             <div className="flex gap-4">
+                         <CardFooter className="flex justify-between items-center bg-slate-50/50 border-t border-gray-100 flex-wrap gap-2 py-3">
+                             <div className="flex gap-3 flex-wrap">
                                 <button 
                                     onClick={() => openHistoryModal(prop.id)}
                                     className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
@@ -612,6 +643,14 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                     <DocumentTextIcon className="w-4 h-4" />
                                     Lease Doc
                                 </button>
+                                <button 
+                                    onClick={() => openRoomsModal(prop)}
+                                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+                                    title="Manage Rooms and Room Occupancy agreements"
+                                >
+                                    <BuildingOfficeIcon className="w-4 h-4" />
+                                    Rooms ({prop.rooms?.length || 0})
+                                </button>
                                 {!isReadOnly && (
                                     <button 
                                         onClick={() => handleOpenRenewal(prop)}
@@ -625,7 +664,7 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                              <div className="text-xs font-medium text-slate-500">
                                 Expires: {formatDate(prop.leaseEnd)}
                              </div>
-                         </CardFooter>
+                          </CardFooter>
                     </Card>
                 ))}
                  {properties.length === 0 && (
@@ -663,6 +702,17 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                     onClose={() => setIsRenewalModalOpen(false)}
                     property={renewalProperty}
                     onRenew={renewLease}
+                />
+            )}
+
+            {isRoomsModalOpen && roomsProperty && (
+                <RoomsModal 
+                    isOpen={isRoomsModalOpen}
+                    onClose={() => {
+                        setIsRoomsModalOpen(false);
+                        setRoomsProperty(null);
+                    }}
+                    property={properties.find(p => p.id === roomsProperty.id) || roomsProperty}
                 />
             )}
         </div>

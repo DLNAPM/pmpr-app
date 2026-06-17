@@ -15,7 +15,7 @@ interface LeaseGeneratorModalProps {
     lease: Lease;
 }
 
-const DEFAULT_TEMPLATE = `RESIDENTIAL LEASE AGREEMENT
+const DEFAULT_TEMPLATE = `RESIDENTIAL LEASE AGREEMENT (Lease #: {{LEASE_NUMBER}})
 
 1. PARTIES:
 This Lease Agreement is made between {{LANDLORD_NAME}} ("Landlord") and {{TENANT_NAMES}} ("Tenant").
@@ -56,18 +56,33 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
     }, [selectedTemplateId, leaseTemplates]);
 
     const populatedLease = useMemo(() => {
-        const tenantNames = lease.tenants.length > 0 ? lease.tenants.map(t => t.name).join(', ') : 'N/A';
+        const tenantNames = lease.tenants && lease.tenants.length > 0 ? lease.tenants.map(t => t.name).join(', ') : 'N/A';
         const landlordName = user?.companyName || user?.name || 'Owner';
+        
+        // Find Room if any
+        const room = lease.roomId && property.rooms ? property.rooms.find(r => r.id === lease.roomId) : null;
+        const pName = room ? `${property.name} - Room: ${room.title} (${room.type})` : property.name;
+        
+        const secDep = lease.securityDeposit !== undefined 
+            ? lease.securityDeposit 
+            : (room?.securityDeposit !== undefined ? room.securityDeposit : property.securityDeposit);
+            
+        const rentAmt = lease.rentAmount !== undefined
+            ? lease.rentAmount
+            : (room?.rentAmount !== undefined ? room.rentAmount : property.rentAmount);
+            
+        const leaseNo = lease.leaseNumber || room?.leaseNumber || 'N/A';
         
         let content = currentTemplate;
         content = content.replace(/\{\{LANDLORD_NAME\}\}/g, landlordName);
         content = content.replace(/\{\{TENANT_NAMES\}\}/g, tenantNames);
-        content = content.replace(/\{\{PROPERTY_NAME\}\}/g, property.name);
+        content = content.replace(/\{\{PROPERTY_NAME\}\}/g, pName);
         content = content.replace(/\{\{PROPERTY_ADDRESS\}\}/g, property.address);
         content = content.replace(/\{\{LEASE_START\}\}/g, formatDate(lease.leaseStart));
         content = content.replace(/\{\{LEASE_END\}\}/g, formatDate(lease.leaseEnd));
-        content = content.replace(/\{\{RENT_AMOUNT\}\}/g, lease.rentAmount.toString());
-        content = content.replace(/\{\{SECURITY_DEPOSIT\}\}/g, property.securityDeposit.toString());
+        content = content.replace(/\{\{RENT_AMOUNT\}\}/g, rentAmt.toString());
+        content = content.replace(/\{\{SECURITY_DEPOSIT\}\}/g, secDep.toString());
+        content = content.replace(/\{\{LEASE_NUMBER\}\}/g, leaseNo);
         
         return content;
     }, [currentTemplate, property, lease, user]);

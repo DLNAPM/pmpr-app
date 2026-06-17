@@ -57,9 +57,25 @@ export interface Repair {
   userId: string;
 }
 
+export interface Room {
+  id: string;
+  title: string;
+  type: string;
+  squareFootage: number;
+  maxOccupancy: number;
+  rentAmount?: number;
+  securityDeposit?: number;
+  leaseStart?: string; // ISO string
+  leaseEnd?: string; // ISO string
+  tenants?: Tenant[];
+  leaseNumber?: string; // Random Lease#
+}
+
 export interface Lease {
   id: string;
   propertyId: string;
+  roomId?: string; // Optional: denotes if the lease is for a specific room specifically
+  leaseNumber?: string; // Randomly generated Lease#
   leaseStart: string; // ISO string
   leaseEnd: string; // ISO string
   rentAmount: number;
@@ -82,6 +98,7 @@ export interface Property {
   userId: string;
   ownerInfo?: { name: string; email: string }; // Optional field to display owner info for shared properties
   leaseHistory?: Lease[]; // Added to track multiple leases
+  rooms?: Room[]; // New list of rooms in dynamic setup
 }
 
 export interface DBOwner {

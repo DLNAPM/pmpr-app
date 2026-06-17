@@ -5,6 +5,7 @@ import useLocalStorage from '../hooks/useLocalStorage';
 import { Property, Payment, Repair, RepairStatus, Contractor, Share, Tenant, DBOwner, Notification, User, Lease, LeaseTemplate } from '../types';
 import { useAuth } from './AuthContext';
 import { db } from '../firebaseConfig';
+import { generateLeaseNumber } from '../utils';
 
 // Declare the global firebase object
 declare const firebase: any;
@@ -151,7 +152,8 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
             rentAmount: p.rentAmount,
             securityDeposit: p.securityDeposit,
             tenants: p.tenants,
-            status: 'active'
+            status: 'active',
+            leaseNumber: generateLeaseNumber()
         };
         setLeases(cur => [...cur, initialLease]);
     };
@@ -173,7 +175,7 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
     const updateLeaseTemplate = async (t: LeaseTemplate) => setLeaseTemplates(cur => cur.map(i => i.id === t.id ? t : i));
     const deleteLeaseTemplate = async (id: string) => setLeaseTemplates(cur => cur.filter(i => i.id !== id));
 
-    const addLease = async (l: any) => setLeases(cur => [...cur, { ...l, id: crypto.randomUUID() }]);
+    const addLease = async (l: any) => setLeases(cur => [...cur, { leaseNumber: l.leaseNumber || generateLeaseNumber(), ...l, id: crypto.randomUUID() }]);
     const updateLease = async (l: Lease) => setLeases(cur => cur.map(i => i.id === l.id ? l : i));
     const deleteLease = async (id: string) => setLeases(cur => cur.filter(i => i.id !== id));
 
@@ -197,7 +199,8 @@ const GuestDataProvider: React.FC<{ user: User | null, children: React.ReactNode
                     rentAmount: finalRent,
                     securityDeposit: p.securityDeposit,
                     tenants: p.tenants,
-                    status: 'active'
+                    status: 'active',
+                    leaseNumber: generateLeaseNumber()
                 };
                 
                 // Set old leases to historic
@@ -382,7 +385,8 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                 rentAmount: p.rentAmount,
                 securityDeposit: p.securityDeposit,
                 tenants: p.tenants,
-                status: 'active'
+                status: 'active',
+                leaseNumber: generateLeaseNumber()
             }));
         } catch (error) {
             handleFirestoreError(error, OperationType.WRITE, 'properties', user);
@@ -451,7 +455,7 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
         }
     };
 
-    const addLease = async (l: any) => { if (!isReadOnly) await db.collection('leases').add(sanitizeData({ ...l, userId: user.id })); };
+    const addLease = async (l: any) => { if (!isReadOnly) await db.collection('leases').add(sanitizeData({ leaseNumber: l.leaseNumber || generateLeaseNumber(), ...l, userId: user.id })); };
     const updateLease = async (l: Lease) => { if (!isReadOnly) await db.collection('leases').doc(l.id).set(sanitizeData(l), { merge: true }); };
     const deleteLease = async (id: string) => { if (!isReadOnly) await db.collection('leases').doc(id).delete(); };
 
@@ -494,7 +498,8 @@ const AuthenticatedDataProvider: React.FC<{ user: User, isReadOnly: boolean, act
                 rentAmount: finalRent,
                 securityDeposit: p.securityDeposit,
                 tenants: p.tenants,
-                status: 'active'
+                status: 'active',
+                leaseNumber: generateLeaseNumber()
             }));
 
             // Set previous leases to historic using a more robust query for the batch

@@ -17,3 +17,15 @@ export const formatDate = (dateStr: string) => {
     // Constructing date with year, monthIndex, day correctly uses local midnight
     return new Date(year, month - 1, day).toLocaleDateString();
 };
+
+/**
+ * Generates a random alphanumeric lease number of the form LSE-XXXXX
+ */
+export const generateLeaseNumber = (): string => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 5; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `LSE-${result}`;
+};
