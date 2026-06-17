@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
-import { Property, Tenant, Payment, RepairStatus, Repair } from '../types';
+import { Property, Tenant, Payment, RepairStatus, Repair, Lease } from '../types';
 import Card, { CardContent, CardHeader } from '../components/Card';
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, PencilSquareIcon, ShieldCheckIcon, CreditCardIcon } from '../components/Icons';
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, PencilSquareIcon, ShieldCheckIcon, CreditCardIcon, DocumentTextIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { ReportFilter, EditTarget } from '../App';
 import { MONTHS } from '../constants';

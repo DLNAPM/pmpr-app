@@ -3,13 +3,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Card, { CardContent, CardHeader, CardFooter } from '../components/Card';
 import { useAppContext } from '../contexts/AppContext';
 import { Property, Tenant } from '../types';
-import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon, CalendarDaysIcon, CurrencyDollarIcon, ClockIcon, DocumentTextIcon } from '../components/Icons';
+import { BuildingOfficeIcon, PlusIcon, UserIcon, PencilSquareIcon, MapPinIcon, TrashIcon, CalendarDaysIcon, CurrencyDollarIcon, ClockIcon, DocumentTextIcon, ArrowUpTrayIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { UTILITY_CATEGORIES, MONTHS } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 import LeaseGeneratorModal from '../components/LeaseGeneratorModal';
 import LeaseRenewalModal from '../components/LeaseRenewalModal';
 import RoomsModal from '../components/RoomsModal';
+import DownsizeTransferModal from '../components/DownsizeTransferModal';
 import { formatDate } from '../utils';
 
 import { Lease } from '../types';
@@ -470,9 +471,17 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
     const [isRoomsModalOpen, setIsRoomsModalOpen] = useState(false);
     const [roomsProperty, setRoomsProperty] = useState<Property | null>(null);
 
+    const [isDownsizeModalOpen, setIsDownsizeModalOpen] = useState(false);
+    const [downsizeProperty, setDownsizeProperty] = useState<Property | null>(null);
+
     const openRoomsModal = (property: Property) => {
         setRoomsProperty(property);
         setIsRoomsModalOpen(true);
+    };
+
+    const openDownsizeModal = (property: Property) => {
+        setDownsizeProperty(property);
+        setIsDownsizeModalOpen(true);
     };
 
     const openAddModal = useCallback(() => {
@@ -651,6 +660,16 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                                     <BuildingOfficeIcon className="w-4 h-4" />
                                     Rooms ({prop.rooms?.length || 0})
                                 </button>
+                                {prop.tenants && prop.tenants.length > 0 && prop.tenants[0].name.trim() !== '' && !isReadOnly && (
+                                    <button 
+                                        onClick={() => openDownsizeModal(prop)}
+                                        className="text-xs font-bold text-orange-600 hover:text-orange-800 flex items-center gap-1 transition-colors"
+                                        title="Downsize Entire Property lease to an individual Room"
+                                    >
+                                        <ArrowUpTrayIcon className="w-4 h-4 rotate-180" />
+                                        Downsize
+                                    </button>
+                                )}
                                 {!isReadOnly && (
                                     <button 
                                         onClick={() => handleOpenRenewal(prop)}
@@ -713,6 +732,17 @@ const PropertiesScreen: React.FC<PropertiesScreenProps> = ({ action, onActionDon
                         setRoomsProperty(null);
                     }}
                     property={properties.find(p => p.id === roomsProperty.id) || roomsProperty}
+                />
+            )}
+
+            {isDownsizeModalOpen && downsizeProperty && (
+                <DownsizeTransferModal 
+                    isOpen={isDownsizeModalOpen}
+                    onClose={() => {
+                        setIsDownsizeModalOpen(false);
+                        setDownsizeProperty(null);
+                    }}
+                    property={properties.find(p => p.id === downsizeProperty.id) || downsizeProperty}
                 />
             )}
         </div>
