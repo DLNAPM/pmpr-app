@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Modal from './Modal';
 import { Property, Room, Tenant } from '../types';
 import { useAppContext } from '../contexts/AppContext';
@@ -48,8 +48,94 @@ const RoomsModal: React.FC<RoomsModalProps> = ({ isOpen, onClose, property }) =>
     const [tenants, setTenants] = useState<Tenant[]>([{ id: crypto.randomUUID(), name: '', email: '', phone: '' }]);
     const [leaseNumber, setLeaseNumber] = useState('');
 
-    // Active room for generating lease
+    // Active room for generating single room lease
     const [selectedLeaseRoom, setSelectedLeaseRoom] = useState<Room | null>(null);
+
+    // Multi-room lease generation states
+    const [activeMultiRooms, setActiveMultiRooms] = useState<Room[] | null>(null);
+    const [activeMultiTenantName, setActiveMultiTenantName] = useState<string>('');
+    const [isCustomMultiModalOpen, setIsCustomMultiModalOpen] = useState(false);
+    const [customSelectedTenant, setCustomSelectedTenant] = useState('');
+    const [customSelectedRoomIds, setCustomSelectedRoomIds] = useState<string[]>([]);
+
+    // Group rooms by tenant to identify multi-room renters
+    const tenantMultiRoomGroups = useMemo(() => {
+        if (!property.rooms || property.rooms.length === 0) return [];
+        
+        const groupsMap = new Map<string, { tenantName: string; tenantEmail?: string; tenantPhone?: string; rooms: Room[] }>();
+        
+        property.rooms.forEach(room => {
+            if (room.tenants && room.tenants.length > 0) {
+                room.tenants.forEach(t => {
+                    if (t.name && t.name.trim() !== '') {
+                        const key = t.email ? t.email.trim().toLowerCase() : t.name.trim().toLowerCase();
+                        if (!groupsMap.has(key)) {
+                            groupsMap.set(key, {
+                                tenantName: t.name,
+                                tenantEmail: t.email,
+                                tenantPhone: t.phone,
+                                rooms: []
+                            });
+                        }
+                        const group = groupsMap.get(key)!;
+                        if (!group.rooms.some(r => r.id === room.id)) {
+                            group.rooms.push(room);
+                        }
+                    }
+                });
+            }
+        });
+
+        return Array.from(groupsMap.values());
+    }, [property.rooms]);
+
+    const multiRoomTenants = useMemo(() => {
+        return tenantMultiRoomGroups.filter(g => g.rooms.length > 1);
+    }, [tenantMultiRoomGroups]);
+
+    const handleOpenMultiRoomForGroup = (group: { tenantName: string; rooms: Room[] }) => {
+        setActiveMultiTenantName(group.tenantName);
+        setActiveMultiRooms(group.rooms);
+    };
+
+    const handleOpenCustomMultiModal = () => {
+        const firstGroup = tenantMultiRoomGroups[0];
+        if (firstGroup) {
+            setCustomSelectedTenant(firstGroup.tenantName);
+            setCustomSelectedRoomIds(firstGroup.rooms.map(r => r.id));
+        } else {
+            setCustomSelectedTenant('');
+            setCustomSelectedRoomIds((property.rooms || []).map(r => r.id));
+        }
+        setIsCustomMultiModalOpen(true);
+    };
+
+    const handleCustomTenantSelectChange = (tenantName: string) => {
+        setCustomSelectedTenant(tenantName);
+        const group = tenantMultiRoomGroups.find(g => g.tenantName.toLowerCase() === tenantName.toLowerCase());
+        if (group) {
+            setCustomSelectedRoomIds(group.rooms.map(r => r.id));
+        }
+    };
+
+    const handleToggleCustomRoomId = (roomId: string) => {
+        if (customSelectedRoomIds.includes(roomId)) {
+            setCustomSelectedRoomIds(prev => prev.filter(id => id !== roomId));
+        } else {
+            setCustomSelectedRoomIds(prev => [...prev, roomId]);
+        }
+    };
+
+    const handleLaunchCustomMultiLease = () => {
+        const selectedRooms = (property.rooms || []).filter(r => customSelectedRoomIds.includes(r.id));
+        if (selectedRooms.length === 0) {
+            alert('Please select at least 1 room to generate a lease doc.');
+            return;
+        }
+        setActiveMultiTenantName(customSelectedTenant || 'Tenant');
+        setActiveMultiRooms(selectedRooms);
+        setIsCustomMultiModalOpen(false);
+    };
 
     const openCreateForm = () => {
         setEditingRoom(null);
@@ -169,6 +255,20 @@ const RoomsModal: React.FC<RoomsModalProps> = ({ isOpen, onClose, property }) =>
         status: 'active' as const
     } : null;
 
+    // Prepare multi-room synthetic lease payload
+    const activeMultiRoomObjects = activeMultiRooms ? activeMultiRooms : [];
+    const multiRoomLeasePayload = activeMultiRoomObjects.length > 0 ? {
+        id: `multi_room_${property.id}`,
+        propertyId: property.id,
+        leaseNumber: activeMultiRoomObjects.map(r => r.leaseNumber).filter(Boolean).join(', ') || generateLeaseNumber(),
+        leaseStart: activeMultiRoomObjects[0]?.leaseStart || new Date().toISOString(),
+        leaseEnd: activeMultiRoomObjects[0]?.leaseEnd || new Date().toISOString(),
+        rentAmount: activeMultiRoomObjects.reduce((sum, r) => sum + (r.rentAmount || 0), 0),
+        securityDeposit: activeMultiRoomObjects.reduce((sum, r) => sum + (r.securityDeposit || 0), 0),
+        tenants: [{ id: crypto.randomUUID(), name: activeMultiTenantName || 'Tenant', email: '', phone: '' }],
+        status: 'active' as const
+    } : null;
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`Manage Rooms & Occupancy - ${property.name}`}>
             <div className="space-y-6">
@@ -180,14 +280,56 @@ const RoomsModal: React.FC<RoomsModalProps> = ({ isOpen, onClose, property }) =>
                         <p className="text-xs text-slate-500">{property.address}</p>
                     </div>
                     {!isReadOnly && !isFormOpen && (
-                        <button 
-                            onClick={openCreateForm}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 transition"
-                        >
-                            <PlusIcon className="w-4 h-4" /> Add Room
-                        </button>
+                        <div className="flex gap-2">
+                            {property.rooms && property.rooms.length > 1 && (
+                                <button 
+                                    onClick={handleOpenCustomMultiModal}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded text-xs font-bold hover:bg-indigo-100 transition shadow-sm"
+                                    title="Generate one consolidated lease doc for a tenant renting multiple rooms"
+                                >
+                                    <DocumentTextIcon className="w-4 h-4" /> Multi-Room Lease
+                                </button>
+                            )}
+                            <button 
+                                onClick={openCreateForm}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 transition"
+                            >
+                                <PlusIcon className="w-4 h-4" /> Add Room
+                            </button>
+                        </div>
                     )}
                 </div>
+
+                {/* Multi-Room Tenant Alert Banners */}
+                {!isFormOpen && multiRoomTenants.length > 0 && (
+                    <div className="space-y-2">
+                        {multiRoomTenants.map((group, idx) => (
+                            <div key={idx} className="p-3.5 bg-indigo-50/90 border border-indigo-200 rounded-xl flex items-center justify-between gap-4 shadow-sm">
+                                <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                        <BuildingOfficeIcon className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                                        <span className="text-xs font-bold text-indigo-950">
+                                            Tenant: <strong className="text-indigo-900 underline underline-offset-2">{group.tenantName}</strong> is renting {group.rooms.length} rooms
+                                        </span>
+                                        <span className="text-[10px] bg-indigo-200 text-indigo-900 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                            Multi-Room
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-indigo-700 pl-6">
+                                        Rooms: <strong>{group.rooms.map(r => `${r.title} ($${r.rentAmount || 0}/mo)`).join(', ')}</strong> &bull; Total: <strong>${group.rooms.reduce((s, r) => s + (r.rentAmount || 0), 0)}/mo</strong>
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => handleOpenMultiRoomForGroup(group)}
+                                    className="flex-shrink-0 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow transition flex items-center gap-1.5"
+                                >
+                                    <DocumentTextIcon className="w-3.5 h-3.5" />
+                                    Generate Combined Lease
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {isFormOpen ? (
                     <form onSubmit={handleSaveRoom} className="p-4 bg-slate-50 border rounded-xl space-y-4">
@@ -506,6 +648,107 @@ const RoomsModal: React.FC<RoomsModalProps> = ({ isOpen, onClose, property }) =>
                     onClose={() => setSelectedLeaseRoom(null)}
                     property={property}
                     lease={roomLeasePayloadPayload}
+                />
+            )}
+
+            {/* Custom Multi-Room Selection Modal */}
+            {isCustomMultiModalOpen && (
+                <Modal 
+                    isOpen={isCustomMultiModalOpen} 
+                    onClose={() => setIsCustomMultiModalOpen(false)} 
+                    title="Generate Single Multi-Room Lease Doc"
+                >
+                    <div className="space-y-4">
+                        <p className="text-xs text-slate-500">
+                            Select a tenant and check the rooms they are renting to produce one single, consolidated lease agreement listing every room.
+                        </p>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Tenant Name</label>
+                            {tenantMultiRoomGroups.length > 0 ? (
+                                <select 
+                                    value={customSelectedTenant} 
+                                    onChange={e => handleCustomTenantSelectChange(e.target.value)}
+                                    className="w-full text-xs p-2.5 border rounded-lg bg-white shadow-sm font-semibold"
+                                >
+                                    {tenantMultiRoomGroups.map((g, idx) => (
+                                        <option key={idx} value={g.tenantName}>
+                                            {g.tenantName} ({g.rooms.length} room{g.rooms.length > 1 ? 's' : ''})
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input 
+                                    type="text"
+                                    value={customSelectedTenant}
+                                    onChange={e => setCustomSelectedTenant(e.target.value)}
+                                    placeholder="Enter Tenant Name"
+                                    className="w-full text-xs p-2.5 border rounded-lg bg-white shadow-sm font-semibold"
+                                />
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-2">Select Rooms to Include on Single Lease Doc:</label>
+                            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                {(property.rooms || []).map(r => {
+                                    const checked = customSelectedRoomIds.includes(r.id);
+                                    return (
+                                        <label 
+                                            key={r.id} 
+                                            className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition ${
+                                                checked ? 'bg-indigo-50/80 border-indigo-300' : 'bg-white border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={checked}
+                                                    onChange={() => handleToggleCustomRoomId(r.id)}
+                                                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                                                />
+                                                <div>
+                                                    <div className="text-xs font-bold text-slate-800">{r.title} ({r.type})</div>
+                                                    <div className="text-[11px] text-slate-500">{r.squareFootage} sq ft &bull; Rent: ${r.rentAmount || 0}/mo</div>
+                                                </div>
+                                            </div>
+                                            <span className="text-xs font-bold text-indigo-900">${r.rentAmount || 0} USD</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-3 border-t">
+                            <button
+                                type="button"
+                                onClick={() => setIsCustomMultiModalOpen(false)}
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleLaunchCustomMultiLease}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1.5"
+                            >
+                                <DocumentTextIcon className="w-4 h-4" />
+                                Generate Consolidated Lease Doc
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Lease Doc Generator Modal for Multi-Room */}
+            {activeMultiRooms && multiRoomLeasePayload && (
+                <LeaseGeneratorModal 
+                    isOpen={!!activeMultiRooms}
+                    onClose={() => setActiveMultiRooms(null)}
+                    property={property}
+                    lease={multiRoomLeasePayload}
+                    multiRooms={activeMultiRooms}
+                    tenantNameOverride={activeMultiTenantName}
                 />
             )}
         </Modal>

@@ -2,10 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'motion/react';
 import Modal from './Modal';
-import { Property, Lease, LeaseTemplate } from '../types';
+import { Property, Lease, LeaseTemplate, Room } from '../types';
 import { useAppContext } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
-import { DocumentTextIcon, ArrowDownTrayIcon, PencilSquareIcon, CloudArrowUpIcon, TrashIcon } from './Icons';
+import { DocumentTextIcon, ArrowDownTrayIcon, PencilSquareIcon, CloudArrowUpIcon, TrashIcon, BuildingOfficeIcon } from './Icons';
 import { formatDate } from '../utils';
 
 interface LeaseGeneratorModalProps {
@@ -13,6 +13,8 @@ interface LeaseGeneratorModalProps {
     onClose: () => void;
     property: Property;
     lease: Lease;
+    multiRooms?: Room[];
+    tenantNameOverride?: string;
 }
 
 const DEFAULT_TEMPLATE = `RESIDENTIAL LEASE AGREEMENT (Lease #: {{LEASE_NUMBER}})
@@ -20,16 +22,18 @@ const DEFAULT_TEMPLATE = `RESIDENTIAL LEASE AGREEMENT (Lease #: {{LEASE_NUMBER}}
 1. PARTIES:
 This Lease Agreement is made between {{LANDLORD_NAME}} ("Landlord") and {{TENANT_NAMES}} ("Tenant").
 
-2. PROPERTY:
-Landlord leases to Tenant the following property:
+2. PROPERTY & LEASED PREMISES:
+Landlord leases to Tenant the following property and specified room(s):
 {{PROPERTY_NAME}}
 {{PROPERTY_ADDRESS}}
+
+{{ROOMS_LIST}}
 
 3. TERM:
 The term of this lease shall be from {{LEASE_START}} to {{LEASE_END}}.
 
 4. RENT:
-The monthly rent for the property is \${{RENT_AMOUNT}}, payable on the first day of each month.
+The total combined monthly rent for the property/leased room(s) is \${{RENT_AMOUNT}}, payable on the first day of each month.
 
 5. SECURITY DEPOSIT:
 Tenant shall provide a security deposit of \${{SECURITY_DEPOSIT}} to be held by Landlord.
@@ -41,7 +45,14 @@ Landlord Signature: ____________________ Date: __________
 Tenant Signature: ____________________ Date: __________
 `;
 
-const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClose, property, lease }) => {
+const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    property, 
+    lease, 
+    multiRooms, 
+    tenantNameOverride 
+}) => {
     const { user } = useAuth();
     const { leaseTemplates, addLeaseTemplate, updateLeaseTemplate, deleteLeaseTemplate } = useAppContext();
     
@@ -50,28 +61,89 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
     const [templateName, setTemplateName] = useState('My Custom Template');
     const [templateContent, setTemplateContent] = useState(DEFAULT_TEMPLATE);
 
+    // Track room selections for multi-room leases
+    const [activeRoomIds, setActiveRoomIds] = useState<string[]>(
+        multiRooms ? multiRooms.map(r => r.id) : []
+    );
+
+    const toggleRoomSelection = (roomId: string) => {
+        if (activeRoomIds.includes(roomId)) {
+            if (activeRoomIds.length <= 1) return; // Keep at least one room
+            setActiveRoomIds(prev => prev.filter(id => id !== roomId));
+        } else {
+            setActiveRoomIds(prev => [...prev, roomId]);
+        }
+    };
+
     const currentTemplate = useMemo(() => {
         if (selectedTemplateId === 'default') return DEFAULT_TEMPLATE;
         return leaseTemplates.find(t => t.id === selectedTemplateId)?.content || DEFAULT_TEMPLATE;
     }, [selectedTemplateId, leaseTemplates]);
 
     const populatedLease = useMemo(() => {
-        const tenantNames = lease.tenants && lease.tenants.length > 0 ? lease.tenants.map(t => t.name).join(', ') : 'N/A';
+        const tenantNames = tenantNameOverride 
+            || (lease.tenants && lease.tenants.length > 0 ? lease.tenants.map(t => t.name).join(', ') : 'N/A');
         const landlordName = user?.companyName || user?.name || 'Owner';
         
-        // Find Room if any
-        const room = lease.roomId && property.rooms ? property.rooms.find(r => r.id === lease.roomId) : null;
-        const pName = room ? `${property.name} - Room: ${room.title} (${room.type})` : property.name;
+        const isMultiRoom = multiRooms && multiRooms.length > 0;
+        const selectedRooms = isMultiRoom 
+            ? (property.rooms || []).filter(r => activeRoomIds.includes(r.id))
+            : [];
+
+        // Find single room if not multi-room
+        const room = !isMultiRoom && lease.roomId && property.rooms ? property.rooms.find(r => r.id === lease.roomId) : null;
         
-        const secDep = lease.securityDeposit !== undefined 
-            ? lease.securityDeposit 
-            : (room?.securityDeposit !== undefined ? room.securityDeposit : property.securityDeposit);
+        let pName = property.name;
+        if (isMultiRoom && selectedRooms.length > 0) {
+            pName = `${property.name} (${selectedRooms.length} Leased Rooms)`;
+        } else if (room) {
+            pName = `${property.name} - Room: ${room.title} (${room.type})`;
+        }
+        
+        let secDep = 0;
+        let rentAmt = 0;
+
+        if (isMultiRoom && selectedRooms.length > 0) {
+            rentAmt = selectedRooms.reduce((sum, r) => sum + (r.rentAmount || 0), 0);
+            secDep = selectedRooms.reduce((sum, r) => sum + (r.securityDeposit || 0), 0);
+        } else {
+            secDep = lease.securityDeposit !== undefined 
+                ? lease.securityDeposit 
+                : (room?.securityDeposit !== undefined ? room.securityDeposit : property.securityDeposit);
+                
+            rentAmt = lease.rentAmount !== undefined
+                ? lease.rentAmount
+                : (room?.rentAmount !== undefined ? room.rentAmount : property.rentAmount);
+        }
             
-        const rentAmt = lease.rentAmount !== undefined
-            ? lease.rentAmount
-            : (room?.rentAmount !== undefined ? room.rentAmount : property.rentAmount);
-            
-        const leaseNo = lease.leaseNumber || room?.leaseNumber || 'N/A';
+        let leaseNo = lease.leaseNumber || room?.leaseNumber || 'N/A';
+        if (isMultiRoom && selectedRooms.length > 0) {
+            const roomLeaseNos = selectedRooms.map(r => r.leaseNumber).filter(Boolean);
+            if (roomLeaseNos.length > 0) {
+                leaseNo = roomLeaseNos.join(', ');
+            }
+        }
+
+        // Generate rooms breakdown text
+        let roomsListFormatted = '';
+        if (isMultiRoom && selectedRooms.length > 0) {
+            roomsListFormatted = `SPECIFIC ROOMS / UNITS INCLUDED ON THIS LEASE AGREEMENT (${selectedRooms.length} Total):\n` +
+                `--------------------------------------------------\n` +
+                selectedRooms.map((r, idx) => 
+                    `${idx + 1}. Room/Unit: ${r.title} (${r.type})\n` +
+                    `   • Size: ${r.squareFootage} sq ft | Max Guests: ${r.maxOccupancy}\n` +
+                    `   • Monthly Rent: $${r.rentAmount || 0} USD\n` +
+                    `   • Security Deposit: $${r.securityDeposit || 0} USD\n` +
+                    `   • Lease Reference #: ${r.leaseNumber || 'N/A'}`
+                ).join('\n\n') +
+                `\n--------------------------------------------------\n` +
+                `Combined Monthly Rent: $${rentAmt.toFixed(2)} USD\n` +
+                `Combined Security Deposit: $${secDep.toFixed(2)} USD`;
+        } else if (room) {
+            roomsListFormatted = `Unit/Room: ${room.title} (${room.type}, ${room.squareFootage} sq ft)`;
+        } else {
+            roomsListFormatted = `Entire Property Premises`;
+        }
         
         let content = currentTemplate;
         content = content.replace(/\{\{LANDLORD_NAME\}\}/g, landlordName);
@@ -83,9 +155,16 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
         content = content.replace(/\{\{RENT_AMOUNT\}\}/g, rentAmt.toString());
         content = content.replace(/\{\{SECURITY_DEPOSIT\}\}/g, secDep.toString());
         content = content.replace(/\{\{LEASE_NUMBER\}\}/g, leaseNo);
+
+        if (content.includes('{{ROOMS_LIST}}')) {
+            content = content.replace(/\{\{ROOMS_LIST\}\}/g, roomsListFormatted);
+        } else if (isMultiRoom && selectedRooms.length > 0) {
+            // If template lacks placeholder, append breakdown under property address
+            content = content.replace(property.address, `${property.address}\n\n${roomsListFormatted}`);
+        }
         
         return content;
-    }, [currentTemplate, property, lease, user]);
+    }, [currentTemplate, property, lease, user, multiRooms, activeRoomIds, tenantNameOverride]);
 
     const handleDownload = () => {
         const doc = new jsPDF();
@@ -282,6 +361,41 @@ const LeaseGeneratorModal: React.FC<LeaseGeneratorModalProps> = ({ isOpen, onClo
                             </button>
                         </div>
                     </div>
+
+                    {multiRooms && multiRooms.length > 0 && (
+                        <div className="mb-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex-shrink-0 space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="font-bold text-indigo-900 flex items-center gap-1.5">
+                                    <BuildingOfficeIcon className="w-4 h-4 text-indigo-600" />
+                                    Multi-Room Single Lease for: <strong className="text-indigo-950">{tenantNameOverride || 'Tenant'}</strong>
+                                </span>
+                                <span className="font-semibold text-indigo-700 text-[11px]">
+                                    {activeRoomIds.length} of {multiRooms.length} room(s) included
+                                </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2 pt-1">
+                                {multiRooms.map(r => {
+                                    const isSelected = activeRoomIds.includes(r.id);
+                                    return (
+                                        <button
+                                            key={r.id}
+                                            type="button"
+                                            onClick={() => toggleRoomSelection(r.id)}
+                                            className={`text-xs px-2.5 py-1 rounded-lg border font-bold flex items-center gap-1.5 transition-all ${
+                                                isSelected 
+                                                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' 
+                                                    : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'
+                                            }`}
+                                        >
+                                            <span>{isSelected ? '✓' : '+'}</span>
+                                            <span>{r.title}</span>
+                                            <span className="text-[10px] opacity-80">(${r.rentAmount || 0}/mo)</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="flex-1 overflow-hidden relative border border-gray-200 rounded-2xl">
                         <AnimatePresence mode="wait">
